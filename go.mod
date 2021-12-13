@@ -1,4 +1,4 @@
-module gobang
+module github.com/CuteReimu/gobang
 
 go 1.15
 
