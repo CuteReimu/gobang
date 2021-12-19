@@ -232,7 +232,7 @@ func (r *robotPlayer) max(step int, foundminVal int) *pointAndValue {
 		}
 		p = queue[0].p
 		r.setIfEmpty(p, r.pColor)
-		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(3-r.pColor)
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
 		r.set(p, colorEmpty)
 		result := &pointAndValue{p, val}
 		r.putIntoCache(r.hash, step, result)
@@ -248,7 +248,7 @@ func (r *robotPlayer) max(step int, foundminVal int) *pointAndValue {
 		}
 		p = obj.p
 		r.set(p, r.pColor)
-		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(3-r.pColor)
+		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
 		if boardVal > 800000 {
 			r.set(p, 0)
 			result := &pointAndValue{p, boardVal}
@@ -286,7 +286,7 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 		for j := 0; j < maxLen; j++ {
 			p.x, p.y = j, i
 			if r.get(p) == 0 && r.isNeighbor(p) {
-				evathis := r.evaluatePoint(p, 3-r.pColor)
+				evathis := r.evaluatePoint(p, r.pColor.conversion())
 				queue = append(queue, &pointAndValue{p, evathis})
 			}
 		}
@@ -298,8 +298,8 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 			return nil
 		}
 		p := queue[0].p
-		r.setIfEmpty(p, 3-r.pColor)
-		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(3-r.pColor)
+		r.setIfEmpty(p, r.pColor.conversion())
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
 		r.set(p, 0)
 		result := &pointAndValue{p, val}
 		r.putIntoCache(r.hash, step, result)
@@ -314,8 +314,8 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 			break
 		}
 		p = obj.p
-		r.set(p, 3-r.pColor)
-		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(3-r.pColor)
+		r.set(p, r.pColor.conversion())
+		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
 		if boardVal < -800000 {
 			r.set(p, 0)
 			result := &pointAndValue{p, boardVal}
@@ -366,7 +366,7 @@ func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor)
 			continue
 		}
 		// 死四A 21111*
-		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, -4) == plyer && (getLine(p, dir, -5) == 3-plyer || getLine(p, dir, -5) == -1) {
+		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, -4) == plyer && (getLine(p, dir, -5) == plyer.conversion() || getLine(p, dir, -5) == -1) {
 			value += 250000
 			if me != plyer {
 				value -= 500
@@ -400,10 +400,10 @@ func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor)
 					}
 				}
 			}
-			if (getLine(p, dir, 1) == 3-plyer || getLine(p, dir, 1) == -1) && getLine(p, dir, -4) == 0 {
+			if (getLine(p, dir, 1) == plyer.conversion() || getLine(p, dir, 1) == -1) && getLine(p, dir, -4) == 0 {
 				value += 500
 			}
-			if (getLine(p, dir, -4) == 3-plyer || getLine(p, dir, -4) == -1) && getLine(p, dir, 1) == 0 {
+			if (getLine(p, dir, -4) == plyer.conversion() || getLine(p, dir, -4) == -1) && getLine(p, dir, 1) == 0 {
 				value += 500
 			}
 			continue
@@ -420,7 +420,7 @@ func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor)
 				value += 6700
 				continue
 			}
-			if (getLine(p, dir, -3) == 3-plyer || getLine(p, dir, -3) == -1) && (getLine(p, dir, 2) == 3-plyer || getLine(p, dir, 2) == -1) {
+			if (getLine(p, dir, -3) == plyer.conversion() || getLine(p, dir, -3) == -1) && (getLine(p, dir, 2) == plyer.conversion() || getLine(p, dir, 2) == -1) {
 				value -= 700
 				continue
 			} else {
@@ -456,7 +456,7 @@ func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor)
 			for l := 0; l <= 4; l++ {
 				if getLine(p, dir, k+l) == plyer {
 					temp += 5 - abs(k+l)
-				} else if getLine(p, dir, k+l) == 3-plyer || getLine(p, dir, k+l) == -1 {
+				} else if getLine(p, dir, k+l) == plyer.conversion() || getLine(p, dir, k+l) == -1 {
 					temp = 0
 					break
 				}
