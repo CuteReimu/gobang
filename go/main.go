@@ -10,8 +10,9 @@ func main() {
 	for i := 0; i < maxLen; i++ {
 		board[i] = make([]playerColor, maxLen)
 	}
-	players := []*AIPlayer{newAIPlayer(colorBlack)}
-	players = append(players, players[0].copy(colorWhite))
+	//players := []player{newAIPlayer(colorBlack), newHumanPlayer(colorWhite)}
+	players := []*AIPlayer{newAIPlayer()}
+	players = append(players, players[0].copy())
 	players[1].rand()
 	//players := []player{newRobotPlayer(colorBlack), newHumanPlayer(colorWhite)} // 机器人先
 	//players := []player{newHumanPlayer(colorBlack), newRobotPlayer(colorWhite)} // 玩家先
@@ -49,7 +50,7 @@ func main() {
 				log.Printf("illegal argument: %s%s\n", p, board[p.y][p.x])
 				continue
 			}
-			board[p.y][p.x] = players[whoseTurn].color()
+			board[p.y][p.x] = playerColor(whoseTurn + 1)
 			//fmt.Printf("%s%s\n", board[p.y][p.x], p)
 			whoseTurn = 1 - whoseTurn
 			if err := players[whoseTurn].display(p); err != nil {
@@ -64,6 +65,7 @@ func main() {
 			if count == maxLen*maxLen || checkForWin(p) {
 				break
 			}
+			//time.Sleep(time.Second)
 		}
 		//break
 		for i := 0; i < maxLen; i++ {
@@ -76,7 +78,7 @@ func main() {
 		}
 		count = 0
 		players[1-whoseTurn].save()
-		players = []*AIPlayer{players[1-whoseTurn].copy(colorBlack), players[1-whoseTurn].copy(colorWhite)}
+		players = []*AIPlayer{players[1-whoseTurn].copy(), players[1-whoseTurn].copy()}
 		players[1].rand()
 		whoseTurn = 0
 	}
