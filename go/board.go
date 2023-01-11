@@ -17,14 +17,14 @@ func (b *boardStatus) initBoardStatus() {
 	b.blackHash = make([][]uint64, maxLen)
 	b.whiteHash = make([][]uint64, maxLen)
 	b.board = make([][]playerColor, maxLen)
-	rand.Seed(1551980916123) //rand.Seed(time.Now().Unix())
+	r := rand.New(rand.NewSource(1551980916123)) //rand.New(rand.NewSource(time.Now().Unix()))
 	for i := 0; i < maxLen; i++ {
 		b.blackHash[i] = make([]uint64, maxLen)
 		b.whiteHash[i] = make([]uint64, maxLen)
 		b.board[i] = make([]playerColor, maxLen)
 		for j := 0; j < maxLen; j++ {
-			b.blackHash[i][j] = rand.Uint64()
-			b.whiteHash[i][j] = rand.Uint64()
+			b.blackHash[i][j] = r.Uint64()
+			b.whiteHash[i][j] = r.Uint64()
 		}
 	}
 }
