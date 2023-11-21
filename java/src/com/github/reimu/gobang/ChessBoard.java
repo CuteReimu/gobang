@@ -6,7 +6,7 @@ import java.util.List;
 public class ChessBoard {
 	public static void main(String[] args) {
 		ChessBoard b = new ChessBoard();
-		b.setPlayer(new HumanPlayer(1), new RobotPlayer(2)); //人对机
+//		b.setPlayer(new HumanPlayer(1), new RobotPlayer(2)); //人对机
 		b.setPlayer(new RobotPlayer(1), new HumanPlayer(2)); //机对人
 //		b.setPlayer(new RobotPlayer(1), new RobotPlayer(2)); //机对机
 //		b.addWatcher(new HumanWatcher());					 //机对机的时候加一个旁观的人

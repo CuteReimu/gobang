@@ -183,7 +183,8 @@ public class RobotPlayer implements Player {
         Point max = null;
         int maxVal = MIN_VALUE;
         int i = 0;
-        for (PointAndValue obj : queue) {
+        PointAndValue obj;
+        while ((obj = queue.poll()) != null) {
             if (++i > MAX_COUNT_EACH_LEVEL) break;
             Point p = obj.point;
             board.set(p, color);
@@ -239,7 +240,8 @@ public class RobotPlayer implements Player {
         Point min = null;
         int minVal = MAX_VALUE;
         int i = 0;
-        for (PointAndValue obj : queue) {
+        PointAndValue obj;
+        while ((obj = queue.poll()) != null) {
             if (++i > MAX_COUNT_EACH_LEVEL) break;
             Point p = obj.point;
             board.set(p, 3 - color);
