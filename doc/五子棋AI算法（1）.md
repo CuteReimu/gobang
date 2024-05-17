@@ -5,11 +5,24 @@
 首先，我们计划是做一个五子棋AI，也就是说让玩家和这个AI对下。整个游戏的框架是这样的：
 
 ```mermaid
-flowchart TD
-  subgraph 棋盘
-  player1
-  player2
-  end
+classDiagram
+  direction LR
+  class 棋盘 {
+    byte[][] board
+    玩家 玩家1
+    玩家 玩家2
+    void play()
+    bool checkForWin()
+  }
+  棋盘 *-- 玩家
+  class 玩家 {
+    <<interface>>
+    Point play()
+    void display(Point p)
+    void notifyWinner(int color)
+  }
+  玩家 <|-- HumanPlayer
+  玩家 <|-- RobotPlayer
 ```
 
 其中，棋盘是一个`Object`，存放当前的棋局情况，通知每个`Player`“轮到你下棋了”、“对方下了什么棋”、“游戏结束，XXX获胜”等消息，并且从每个`Player`那里获取他下了什么棋。两个`Player`分别是人类玩家和AI。`Player`的基类应该是一个`interface`，里面只有三个方法。人类玩家和AI是它的子类，分别实现这三个方法。
