@@ -1,10 +1,14 @@
 module github.com/CuteReimu/gobang
 
-go 1.15
+go 1.22
+
+require github.com/hajimehoshi/ebiten/v2 v2.7.4
 
 require (
-	github.com/lxn/walk v0.0.0-20210112085537-c389da54e794
-	github.com/lxn/win v0.0.0-20210218163916-a377121e959e // indirect
+	github.com/ebitengine/gomobile v0.0.0-20240518074828-e86332849895 // indirect
+	github.com/ebitengine/hideconsole v1.0.0 // indirect
+	github.com/ebitengine/purego v0.7.0 // indirect
+	github.com/jezek/xgb v1.1.1 // indirect
+	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
-	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 )
