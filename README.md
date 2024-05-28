@@ -5,7 +5,7 @@
 文字讲解（Java版）请前往[doc目录](doc)查看
 
 Java代码仅支持在Windows运行，程序入口在`ChessBoard.java`中的`main`函数。\
-Go代码支持在任何平台运行。
+Go代码支持在任何有图形界面的平台运行。
 
 ## 注意
 
