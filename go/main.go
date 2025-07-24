@@ -18,17 +18,6 @@ func main() {
 		return
 	}
 
-func main() {
-	optimized := flag.Bool("optimized", false, "Use optimized AI parameters for better performance")
-	benchmark := flag.Bool("benchmark", false, "Run AI performance benchmark")
-	flag.Parse()
-
-	if *benchmark {
-		benchmarkAI()
-		runSelfPlayTest()
-		return
-	}
-
 	runGameWithGUI(*optimized)
 }
 
