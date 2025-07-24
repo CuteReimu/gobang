@@ -1,12 +1,38 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"
 	"log"
 )
 
 func main() {
+	optimized := flag.Bool("optimized", false, "Use optimized AI parameters for better performance")
+	benchmark := flag.Bool("benchmark", false, "Run AI performance benchmark")
+	flag.Parse()
+
+	if *benchmark {
+		benchmarkAI()
+		runSelfPlayTest()
+		return
+	}
+
+func main() {
+	optimized := flag.Bool("optimized", false, "Use optimized AI parameters for better performance")
+	benchmark := flag.Bool("benchmark", false, "Run AI performance benchmark")
+	flag.Parse()
+
+	if *benchmark {
+		benchmarkAI()
+		runSelfPlayTest()
+		return
+	}
+
+	runGameWithGUI(*optimized)
+}
+
+func runGameWithGUI(optimized bool) {
 	hp := newHumanPlayer(colorWhite)
 	//hp := newHumanWatcher()
 	go func() {
@@ -14,7 +40,17 @@ func main() {
 		for i := 0; i < maxLen; i++ {
 			board[i] = make([]playerColor, maxLen)
 		}
-		players := []player{newRobotPlayer(colorBlack), hp} // 机器人先
+		
+		var robot player
+		if optimized {
+			robot = newOptimizedRobotPlayer(colorBlack)
+			fmt.Println("Using optimized AI parameters for better performance")
+		} else {
+			robot = newRobotPlayer(colorBlack)
+			fmt.Println("Using default AI parameters")
+		}
+		
+		players := []player{robot, hp} // 机器人先
 		//players := []player{hp, newRobotPlayer(colorWhite)} // 玩家先
 		//players := []player{newRobotPlayer(colorBlack), newRobotPlayer(colorWhite)}
 		var watchers []*humanWatcher

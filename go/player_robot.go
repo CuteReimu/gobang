@@ -7,6 +7,62 @@ import (
 	"sort"
 )
 
+// EvaluationParams holds configurable evaluation parameters
+type EvaluationParams struct {
+	// Pattern values for evaluatePoint2
+	LiveFour      int // 活四
+	DeadFourA     int // 死四A
+	DeadFourB     int // 死四B
+	DeadFourC     int // 死四C
+	LiveThreeNear int // 活三 近3位置
+	LiveThreeBonus int // 活三额外奖励
+	LiveThreeFar   int // 活三 远3位置
+	DeadThree      int // 死三
+	DeadThreeBonus int // 死三额外奖励
+	TwoCount2      int // 活二×2的奖励
+	TwoCount1      int // 活二×1的奖励
+	ScatterMultiplier int // 散棋乘数
+	OpponentPenalty   int // 对手惩罚
+	OpponentMinorPenalty int // 对手小惩罚
+	
+	// Pattern values for evaluateBoard
+	FiveInRow     int // 五连珠
+	FourInRowOpen int // 活四
+	FourInRowClosed int // 死四
+	ThreeInRowVariants map[string]int // 活三的各种变体
+}
+
+// getDefaultEvaluationParams returns the default evaluation parameters
+func getDefaultEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:      300000,
+		DeadFourA:     250000,
+		DeadFourB:     240000,
+		DeadFourC:     230000,
+		LiveThreeNear: 1450,
+		LiveThreeBonus: 6000,
+		LiveThreeFar:   350,
+		DeadThree:      700,
+		DeadThreeBonus: 6700,
+		TwoCount2:      3000,
+		TwoCount1:      2725,
+		ScatterMultiplier: 5,
+		OpponentPenalty:   500,
+		OpponentMinorPenalty: 300,
+		FiveInRow:     1000000,
+		FourInRowOpen: 300000,
+		FourInRowClosed: 25000,
+		ThreeInRowVariants: map[string]int{
+			"open":     22000,
+			"semi":     500,
+			"closed":   26000,
+			"gap":      800,
+			"basic":    650,
+			"corner":   150,
+		},
+	}
+}
+
 type robotPlayer struct {
 	boardStatus
 	boardCache
@@ -14,6 +70,7 @@ type robotPlayer struct {
 	maxLevelCount     int
 	maxCountEachLevel int
 	maxCheckmateCount int
+	evalParams        *EvaluationParams
 }
 
 func newRobotPlayer(color playerColor) player {
@@ -23,9 +80,55 @@ func newRobotPlayer(color playerColor) player {
 		maxLevelCount:     6,
 		maxCountEachLevel: 16,
 		maxCheckmateCount: 12,
+		evalParams:        getDefaultEvaluationParams(),
 	}
 	rp.initBoardStatus()
 	return rp
+}
+
+// newOptimizedRobotPlayer creates a robot player with optimized parameters
+func newOptimizedRobotPlayer(color playerColor) player {
+	rp := &robotPlayer{
+		boardCache:        make(boardCache),
+		pColor:            color,
+		maxLevelCount:     5,        // Reduced depth for better performance
+		maxCountEachLevel: 12,       // Reduced candidates for better performance
+		maxCheckmateCount: 10,       // Reduced checkmate search
+		evalParams:        getOptimizedEvaluationParams(),
+	}
+	rp.initBoardStatus()
+	return rp
+}
+
+// getOptimizedEvaluationParams returns optimized evaluation parameters
+func getOptimizedEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:      320000,  // Slightly increased
+		DeadFourA:     260000,  // Slightly increased
+		DeadFourB:     245000,  // Slightly increased
+		DeadFourC:     235000,  // Slightly increased
+		LiveThreeNear: 1500,    // Slightly increased
+		LiveThreeBonus: 6200,   // Slightly increased
+		LiveThreeFar:   400,    // Slightly increased
+		DeadThree:      750,    // Slightly increased
+		DeadThreeBonus: 6800,   // Slightly increased
+		TwoCount2:      3100,   // Slightly increased
+		TwoCount1:      2800,   // Slightly increased
+		ScatterMultiplier: 6,   // Slightly increased
+		OpponentPenalty:   480, // Slightly decreased for balance
+		OpponentMinorPenalty: 280, // Slightly decreased for balance
+		FiveInRow:     1050000, // Increased for priority
+		FourInRowOpen: 315000,  // Slightly increased
+		FourInRowClosed: 26000, // Slightly increased
+		ThreeInRowVariants: map[string]int{
+			"open":     23000,  // Slightly increased
+			"semi":     520,    // Slightly increased
+			"closed":   27000,  // Slightly increased
+			"gap":      850,    // Slightly increased
+			"basic":    680,    // Slightly increased
+			"corner":   160,    // Slightly increased
+		},
+	}
 }
 
 func (r *robotPlayer) color() playerColor {
@@ -53,12 +156,34 @@ func (r *robotPlayer) play() (point, error) {
 			return p, nil
 		}
 	}
-	result := r.max(r.maxLevelCount, 100000000)
+	
+	// Use iterative deepening for better time management
+	result := r.iterativeDeepening()
 	if result == nil {
 		return point{}, errors.New("algorithm error")
 	}
 	r.set(result.p, r.pColor)
 	return result.p, nil
+}
+
+// iterativeDeepening implements iterative deepening for better time management
+func (r *robotPlayer) iterativeDeepening() *pointAndValue {
+	var bestResult *pointAndValue
+	
+	// Start with shallow searches and progressively deepen
+	for depth := 2; depth <= r.maxLevelCount; depth++ {
+		result := r.max(depth, 100000000)
+		if result != nil {
+			bestResult = result
+		}
+		
+		// Early termination for strong positions
+		if bestResult != nil && bestResult.value > 800000 {
+			break
+		}
+	}
+	
+	return bestResult
 }
 
 func (r *robotPlayer) calculateKill(color playerColor, aggressive bool, step int) (point, bool) {
@@ -225,6 +350,10 @@ func (r *robotPlayer) max(step int, foundminVal int) *pointAndValue {
 		}
 	}
 	sort.Sort(queue)
+	
+	// Adaptive candidate count based on game phase
+	maxCandidates := r.getAdaptiveCandidateCount(len(queue))
+	
 	if step == 1 {
 		if len(queue) == 0 {
 			log.Println("algorithm error")
@@ -243,7 +372,7 @@ func (r *robotPlayer) max(step int, foundminVal int) *pointAndValue {
 	i := 0
 	for _, obj := range queue {
 		i++
-		if i > r.maxCountEachLevel {
+		if i > maxCandidates {
 			break
 		}
 		p = obj.p
@@ -292,6 +421,10 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 		}
 	}
 	sort.Sort(queue)
+	
+	// Adaptive candidate count based on game phase
+	maxCandidates := r.getAdaptiveCandidateCount(len(queue))
+	
 	if step == 1 {
 		if len(queue) == 0 {
 			log.Println("algorithm error")
@@ -310,7 +443,7 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 	i := 0
 	for _, obj := range queue {
 		i++
-		if i > r.maxCountEachLevel {
+		if i > maxCandidates {
 			break
 		}
 		p = obj.p
@@ -343,6 +476,26 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 	return result
 }
 
+// getAdaptiveCandidateCount returns adaptive candidate count based on game phase
+func (r *robotPlayer) getAdaptiveCandidateCount(totalCandidates int) int {
+	// In early game (fewer pieces), consider more candidates
+	// In late game (more pieces), focus on fewer but better candidates
+	if r.count < 10 {
+		return min(r.maxCountEachLevel+4, totalCandidates)
+	} else if r.count < 20 {
+		return min(r.maxCountEachLevel, totalCandidates)
+	} else {
+		return min(r.maxCountEachLevel-2, totalCandidates)
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func (r *robotPlayer) evaluatePoint(p point, color playerColor) int {
 	return r.evaluatePoint2(p, color, colorBlack) + r.evaluatePoint2(p, color, colorWhite)
 }
@@ -359,69 +512,69 @@ func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor)
 	for _, dir := range eightDirections { // 8个方向
 		// 活四 01111* *代表当前空位置 0代表其他空位置 下同
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, -4) == plyer && getLine(p, dir, -5) == 0 {
-			value += 300000
+			value += r.evalParams.LiveFour
 			if me != plyer {
-				value -= 500
+				value -= r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 死四A 21111*
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, -4) == plyer && (getLine(p, dir, -5) == plyer.conversion() || getLine(p, dir, -5) == -1) {
-			value += 250000
+			value += r.evalParams.DeadFourA
 			if me != plyer {
-				value -= 500
+				value -= r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 死四B 111*1
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, 1) == plyer {
-			value += 240000
+			value += r.evalParams.DeadFourB
 			if me != plyer {
-				value -= 500
+				value -= r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 死四C 11*11
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, 1) == plyer && getLine(p, dir, 2) == plyer {
-			value += 230000
+			value += r.evalParams.DeadFourC
 			if me != plyer {
-				value -= 500
+				value -= r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 活三 近3位置 111*0
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer {
 			if getLine(p, dir, 1) == 0 {
-				value += 1450
+				value += r.evalParams.LiveThreeNear
 				if getLine(p, dir, -4) == 0 {
-					value += 6000
+					value += r.evalParams.LiveThreeBonus
 					if me != plyer {
-						value -= 300
+						value -= r.evalParams.OpponentMinorPenalty
 					}
 				}
 			}
 			if (getLine(p, dir, 1) == plyer.conversion() || getLine(p, dir, 1) == -1) && getLine(p, dir, -4) == 0 {
-				value += 500
+				value += r.evalParams.OpponentPenalty
 			}
 			if (getLine(p, dir, -4) == plyer.conversion() || getLine(p, dir, -4) == -1) && getLine(p, dir, 1) == 0 {
-				value += 500
+				value += r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 活三 远3位置 1110*
 		if getLine(p, dir, -1) == 0 && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, -4) == plyer {
-			value += 350
+			value += r.evalParams.LiveThreeFar
 			continue
 		}
 		// 死三 11*1
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, 1) == plyer {
-			value += 700
+			value += r.evalParams.DeadThree
 			if getLine(p, dir, -3) == 0 && getLine(p, dir, 2) == 0 {
-				value += 6700
+				value += r.evalParams.DeadThreeBonus
 				continue
 			}
 			if (getLine(p, dir, -3) == plyer.conversion() || getLine(p, dir, -3) == -1) && (getLine(p, dir, 2) == plyer.conversion() || getLine(p, dir, 2) == -1) {
-				value -= 700
+				value -= r.evalParams.DeadThree
 				continue
 			} else {
 				value += 800
@@ -463,16 +616,16 @@ func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor)
 			}
 			numOfplyer += temp
 		}
-		value += numOfplyer * 5
+		value += numOfplyer * r.evalParams.ScatterMultiplier
 	}
 	numoftwo /= 2
 	if numoftwo >= 2 {
-		value += 3000
+		value += r.evalParams.TwoCount2
 		if me != plyer {
 			value -= 100
 		}
 	} else if numoftwo == 1 {
-		value += 2725
+		value += r.evalParams.TwoCount1
 		if me != plyer {
 			value -= 10
 		}
@@ -499,14 +652,14 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 					}
 				}
 				if colors[5] == color && colors[6] == color && colors[7] == color && colors[8] == color {
-					values += 1000000
+					values += r.evalParams.FiveInRow
 					continue
 				}
 				if colors[5] == color && colors[6] == color && colors[7] == color && colors[3] == 0 {
 					if colors[8] == 0 { //?AAAA?
-						values += 300000 / 2
+						values += r.evalParams.FourInRowOpen / 2
 					} else if colors[8] != color { //AAAA?
-						values += 25000
+						values += r.evalParams.FourInRowClosed
 					}
 					continue
 				}
@@ -517,26 +670,26 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 					}
 					if colors[3] == 0 && colors[7] == 0 {
 						if colors[2] == 0 && colors[8] != color || colors[8] == 0 && colors[2] != color { //??AAA??
-							values += 22000 / 2
+							values += r.evalParams.ThreeInRowVariants["open"] / 2
 						} else if colors[2] != color && colors[2] != 0 && colors[8] != color && colors[8] != 0 { //?AAA?
-							values += 500 / 2
+							values += r.evalParams.ThreeInRowVariants["semi"] / 2
 						}
 						continue
 					}
 					if colors[3] != 0 && colors[3] != color && colors[7] == 0 && colors[8] == 0 { //AAA??
-						values += 500
+						values += r.evalParams.ThreeInRowVariants["semi"]
 						continue
 					}
 				}
 				if colors[5] == color && colors[6] == 0 && colors[7] == color && colors[8] == color { //AA?AA
-					values += 26000 / 2
+					values += r.evalParams.ThreeInRowVariants["closed"] / 2
 					continue
 				}
 				if colors[5] == 0 && colors[6] == color && colors[7] == color {
 					if colors[3] == 0 && colors[8] == 0 { //?A?AA?
-						values += 22000
+						values += r.evalParams.ThreeInRowVariants["open"]
 					} else if (colors[3] != 0 && colors[3] != color && colors[8] == 0) || (colors[8] != 0 && colors[8] != color && colors[3] == 0) { //A?AA? ?A?AA
-						values += 800
+						values += r.evalParams.ThreeInRowVariants["gap"]
 					}
 					continue
 				}
@@ -551,12 +704,12 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 				if colors[5] == color {
 					if colors[3] == 0 && colors[6] == 0 {
 						if colors[1] == 0 && colors[2] == 0 && colors[7] != 0 && colors[7] != color || colors[8] == 0 && colors[7] == 0 && colors[2] != 0 && colors[2] != color { //??AA??
-							values += 650 / 2
+							values += r.evalParams.ThreeInRowVariants["basic"] / 2
 						} else if colors[2] != 0 && colors[2] != color && colors[7] == 0 && colors[8] != 0 && colors[8] != color { //?AA??
-							values += 150
+							values += r.evalParams.ThreeInRowVariants["corner"]
 						}
 					} else if colors[3] != 0 && colors[3] != color && colors[6] == 0 && colors[7] == 0 && colors[8] == 0 { //AA???
-						values += 150
+						values += r.evalParams.ThreeInRowVariants["corner"]
 					}
 					continue
 				}
@@ -566,10 +719,10 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 							values += 250 / 2
 						}
 						if colors[2] != 0 && colors[2] != color && colors[8] != 0 && colors[8] != color { //?A?A?
-							values += 150 / 2
+							values += r.evalParams.ThreeInRowVariants["corner"] / 2
 						}
 					} else if colors[3] != 0 && colors[3] != color && colors[7] == 0 && colors[8] == 0 { //A?A??
-						values += 150
+						values += r.evalParams.ThreeInRowVariants["corner"]
 					}
 					continue
 				}
@@ -585,7 +738,7 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 							if color5 == 0 {
 								values += 200
 							} else if color5 != color {
-								values += 150
+								values += r.evalParams.ThreeInRowVariants["corner"]
 							}
 						}
 					}
@@ -603,6 +756,85 @@ type pointAndValue struct {
 }
 
 type pointAndValueSlice []*pointAndValue
+
+// SelfPlayResult holds the result of a self-play game
+type SelfPlayResult struct {
+	Winner playerColor
+	Moves  int
+	Duration int // in milliseconds
+}
+
+// adjustParameters adjusts evaluation parameters based on game outcomes
+func (r *robotPlayer) adjustParameters(results []SelfPlayResult) {
+	if len(results) < 5 {
+		return // Need at least 5 games for adjustment
+	}
+	
+	winRate := r.calculateWinRate(results)
+	avgMoves := r.calculateAverageMovesPerGame(results)
+	
+	// If win rate is too low, make AI more aggressive
+	if winRate < 0.4 {
+		r.evalParams.LiveFour += 10000
+		r.evalParams.DeadFourA += 8000
+		r.evalParams.LiveThreeNear += 100
+		r.evalParams.LiveThreeBonus += 500
+	}
+	
+	// If games are too long, prioritize quicker wins
+	if avgMoves > 50 {
+		r.evalParams.FiveInRow += 50000
+		r.evalParams.FourInRowOpen += 15000
+	}
+	
+	// If games are too short, encourage more strategic play
+	if avgMoves < 25 {
+		r.evalParams.ThreeInRowVariants["open"] += 1000
+		r.evalParams.ThreeInRowVariants["semi"] += 500
+	}
+}
+
+func (r *robotPlayer) calculateWinRate(results []SelfPlayResult) float64 {
+	wins := 0
+	for _, result := range results {
+		if result.Winner == r.pColor {
+			wins++
+		}
+	}
+	return float64(wins) / float64(len(results))
+}
+
+func (r *robotPlayer) calculateAverageMovesPerGame(results []SelfPlayResult) float64 {
+	totalMoves := 0
+	for _, result := range results {
+		totalMoves += result.Moves
+	}
+	return float64(totalMoves) / float64(len(results))
+}
+
+// createPlayerCopy creates a copy of the robot player with the same parameters
+func (r *robotPlayer) createPlayerCopy(color playerColor) *robotPlayer {
+	rp := &robotPlayer{
+		boardCache:        make(boardCache),
+		pColor:            color,
+		maxLevelCount:     r.maxLevelCount,
+		maxCountEachLevel: r.maxCountEachLevel,
+		maxCheckmateCount: r.maxCheckmateCount,
+		evalParams:        r.copyEvaluationParams(),
+	}
+	rp.initBoardStatus()
+	return rp
+}
+
+func (r *robotPlayer) copyEvaluationParams() *EvaluationParams {
+	copied := *r.evalParams
+	// Deep copy the map
+	copied.ThreeInRowVariants = make(map[string]int)
+	for k, v := range r.evalParams.ThreeInRowVariants {
+		copied.ThreeInRowVariants[k] = v
+	}
+	return &copied
+}
 
 func (s pointAndValueSlice) Len() int {
 	return len(s)
