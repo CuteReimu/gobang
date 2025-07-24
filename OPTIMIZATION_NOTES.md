@@ -43,7 +43,7 @@ Benchmark results show significant improvement:
 
 ### Run Performance Benchmark
 ```bash
-cd go/benchmark
+cd go/bench_utils
 go run *.go
 ```
 
