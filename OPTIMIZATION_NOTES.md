@@ -1,101 +1,101 @@
-# Gobang AI Optimizations
+# 五子棋AI优化
 
-This document describes the optimizations made to address the performance and magic number issues in the gobang (五子棋) AI.
+本文档描述了为解决五子棋AI中的性能和魔数问题而进行的优化。
 
-## Issues Addressed
+## 解决的问题
 
-### 1. Performance Optimization
-**Problem**: The AI was too slow with parameters maxLevelCount=6, maxCountEachLevel=16, maxCheckmateCount=12, taking 1+ minutes in mid-to-late game.
+### 1. 性能优化
+**问题**: AI在参数maxLevelCount=6, maxCountEachLevel=16, maxCheckmateCount=12的设置下过于缓慢，在中后期游戏中需要1分钟以上的思考时间。
 
-**Solutions Implemented**:
-- **Iterative Deepening**: Start with shallow searches and progressively deepen, allowing for early termination on strong positions
-- **Adaptive Candidate Selection**: Reduce candidates in late game when more pieces are on board
-- **Optimized Search Parameters**: Reduced default depth from 6 to 5, candidates from 16 to 12 for better balance of strength vs speed
-- **Better Move Ordering**: Improved evaluation-based sorting for better alpha-beta pruning
+**实施的解决方案**:
+- **迭代加深**: 从浅层搜索开始逐步加深，允许在强势位置时提前终止
+- **自适应候选选择**: 当棋盘上棋子较多时减少候选位置
+- **优化搜索参数**: 将默认深度从6降至5，候选数从16降至12，以获得更好的强度与速度平衡
+- **改进走法排序**: 改进基于评估的排序以提高alpha-beta剪枝效果
 
-### 2. Magic Numbers Elimination
-**Problem**: evaluateBoard function contained many hardcoded experience-based values (300000, 250000, etc.)
+### 2. 消除魔数
+**问题**: evaluateBoard函数包含许多硬编码的经验值(300000, 250000等)
 
-**Solutions Implemented**:
-- **Configuration Structure**: Created `EvaluationParams` struct to hold all evaluation parameters
-- **Parameter Separation**: Extracted all magic numbers into configurable parameters with meaningful names
-- **Optimized Parameter Set**: Created alternative parameter set based on analysis and testing
-- **Self-Play Framework**: Added basic infrastructure for parameter tuning through self-play
+**实施的解决方案**:
+- **配置结构**: 创建`EvaluationParams`结构体来保存所有评估参数
+- **参数分离**: 将所有魔数提取为具有意义名称的可配置参数
+- **优化参数集**: 基于分析和测试创建替代参数集
+- **自对弈框架**: 添加通过自对弈进行参数调优的基础设施
 
-## Performance Results
+## 性能结果
 
-Benchmark results show significant improvement:
-- **48.4% faster** execution time
-- **1.9x speedup** in move calculation
-- Maintained strategic strength while improving responsiveness
+基准测试结果显示显著改善:
+- **快48.4%** 的执行时间
+- **1.9倍加速** 的走法计算
+- 在提高响应速度的同时保持战略强度
 
-## Usage
+## 使用方法
 
-### Run with Original Parameters
+### 使用原始参数运行
 ```bash
 ./gobang
 ```
 
-### Run with Optimized Parameters
+### 使用优化参数运行
 ```bash
 ./gobang -optimized
 ```
 
-### Run Performance Benchmark
+### 运行性能基准测试
 ```bash
 cd go/bench_utils
 go run *.go
 ```
 
-## Technical Details
+## 技术细节
 
-### Key Optimizations
+### 关键优化
 
-1. **Iterative Deepening**
-   - Prevents timeout issues by starting shallow
-   - Allows early termination on strong positions (value > 800000)
-   - Better time management overall
+1. **迭代加深**
+   - 通过浅层开始防止超时问题
+   - 允许在强势位置(值 > 800000)时提前终止
+   - 整体更好的时间管理
 
-2. **Adaptive Candidate Count**
-   - Early game: maxCountEachLevel + 4 candidates
-   - Mid game: maxCountEachLevel candidates  
-   - Late game: maxCountEachLevel - 2 candidates
-   - Balances exploration vs exploitation based on game phase
+2. **自适应候选数量**
+   - 早期游戏: maxCountEachLevel + 4个候选
+   - 中期游戏: maxCountEachLevel个候选  
+   - 后期游戏: maxCountEachLevel - 2个候选
+   - 根据游戏阶段平衡探索与利用
 
-3. **Parameter Configuration**
-   - All magic numbers extracted to `EvaluationParams` struct
-   - Default and optimized parameter sets available
-   - Easy to modify and experiment with different values
+3. **参数配置**
+   - 所有魔数提取到`EvaluationParams`结构体
+   - 提供默认和优化的参数集
+   - 便于修改和试验不同数值
 
-4. **Self-Play Infrastructure**
-   - Framework for parameter adjustment based on game outcomes
-   - Win rate and game length analysis
-   - Automatic parameter tuning capability
+4. **自对弈基础设施**
+   - 基于游戏结果进行参数调整的框架
+   - 胜率和游戏长度分析
+   - 自动参数调优能力
 
-### Configurable Parameters
+### 可配置参数
 
-The evaluation system now uses configurable parameters for:
-- Pattern values (live four, dead four, live three, etc.)
-- Opponent penalties
-- Scatter piece multipliers
-- Three-in-a-row variants
-- Board evaluation weights
+评估系统现在使用可配置参数:
+- 棋型值(活四、死四、活三等)
+- 对手惩罚
+- 散棋乘数
+- 三连珠变体
+- 棋盘评估权重
 
-## Future Improvements
+## 未来改进
 
-The infrastructure is now in place for:
-- Machine learning-based parameter optimization
-- More sophisticated self-play training
-- Dynamic parameter adjustment during games
-- Performance profiling and further optimizations
+现在已具备以下基础设施:
+- 基于机器学习的参数优化
+- 更复杂的自对弈训练
+- 游戏中的动态参数调整
+- 性能分析和进一步优化
 
-## Files Modified
+## 修改的文件
 
-- `player_robot.go`: Core AI logic with optimizations
-- `main.go`: Added command-line flags for optimization mode
-- `simple_benchmark.go`: Performance testing utility
-- `OPTIMIZATION_NOTES.md`: This documentation
+- `player_robot.go`: 带优化的核心AI逻辑
+- `main.go`: 添加优化模式的命令行标志
+- `simple_benchmark.go`: 性能测试工具
+- `OPTIMIZATION_NOTES.md`: 本文档
 
-## Testing
+## 测试
 
-The optimizations maintain the AI's strategic capabilities while significantly improving performance. The benchmark demonstrates measurable improvements in thinking time without sacrificing game strength.
+这些优化在显著提高性能的同时保持了AI的战略能力。基准测试显示思考时间的可衡量改进，而不会牺牲游戏强度。

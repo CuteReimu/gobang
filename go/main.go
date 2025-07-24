@@ -8,8 +8,8 @@ import (
 )
 
 func main() {
-	optimized := flag.Bool("optimized", false, "Use optimized AI parameters for better performance")
-	benchmark := flag.Bool("benchmark", false, "Run AI performance benchmark")
+	optimized := flag.Bool("optimized", false, "使用优化AI参数以获得更好性能")
+	benchmark := flag.Bool("benchmark", false, "运行AI性能基准测试")
 	flag.Parse()
 
 	if *benchmark {
@@ -33,10 +33,10 @@ func runGameWithGUI(optimized bool) {
 		var robot player
 		if optimized {
 			robot = newOptimizedRobotPlayer(colorBlack)
-			fmt.Println("Using optimized AI parameters for better performance")
+			fmt.Println("使用优化AI参数以获得更好性能")
 		} else {
 			robot = newRobotPlayer(colorBlack)
-			fmt.Println("Using default AI parameters")
+			fmt.Println("使用默认AI参数")
 		}
 		
 		players := []player{robot, hp} // 机器人先

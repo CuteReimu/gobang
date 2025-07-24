@@ -8,29 +8,29 @@ import (
 
 // benchmarkAI runs a simple benchmark to test AI performance
 func benchmarkAI() {
-	fmt.Println("Running AI Performance Benchmark...")
+	fmt.Println("运行AI性能基准测试...")
 	fmt.Println("=====================================")
 	
 	// Test original AI
-	fmt.Println("\nTesting Original AI...")
+	fmt.Println("\n测试原始AI...")
 	originalRobot := newRobotPlayer(colorBlack).(*robotPlayer)
 	originalTime := measureAIThinkingTime(originalRobot)
-	fmt.Printf("Original AI average thinking time: %.2f seconds\n", originalTime)
+	fmt.Printf("原始AI平均思考时间: %.2f 秒\n", originalTime)
 	
 	// Test optimized AI
-	fmt.Println("\nTesting Optimized AI...")
+	fmt.Println("\n测试优化AI...")
 	optimizedRobot := newOptimizedRobotPlayer(colorBlack).(*robotPlayer)
 	optimizedTime := measureAIThinkingTime(optimizedRobot)
-	fmt.Printf("Optimized AI average thinking time: %.2f seconds\n", optimizedTime)
+	fmt.Printf("优化AI平均思考时间: %.2f 秒\n", optimizedTime)
 	
 	// Calculate improvement
 	improvement := ((originalTime - optimizedTime) / originalTime) * 100
-	fmt.Printf("\nPerformance improvement: %.1f%%\n", improvement)
+	fmt.Printf("\n性能提升: %.1f%%\n", improvement)
 	
 	if improvement > 0 {
-		fmt.Printf("Optimized AI is %.1fx faster\n", originalTime/optimizedTime)
+		fmt.Printf("优化AI快了 %.1f倍\n", originalTime/optimizedTime)
 	} else {
-		fmt.Println("Optimized AI is not faster (may need more tuning)")
+		fmt.Println("优化AI没有更快 (可能需要更多调优)")
 	}
 }
 
@@ -52,9 +52,9 @@ func measureAIThinkingTime(robot *robotPlayer) float64 {
 		totalTime += elapsed.Seconds()
 		
 		if result != nil {
-			fmt.Printf("  Test %d: %.2f seconds (move: %v)\n", i+1, elapsed.Seconds(), result.p)
+			fmt.Printf("  测试 %d: %.2f 秒 (走法: %v)\n", i+1, elapsed.Seconds(), result.p)
 		} else {
-			fmt.Printf("  Test %d: %.2f seconds (no move found)\n", i+1, elapsed.Seconds())
+			fmt.Printf("  测试 %d: %.2f 秒 (未找到走法)\n", i+1, elapsed.Seconds())
 		}
 	}
 	
@@ -85,7 +85,7 @@ func setupMidGamePosition(robot *robotPlayer) {
 
 // runSelfPlayTest runs a self-play test to evaluate parameter effectiveness
 func runSelfPlayTest() {
-	fmt.Println("\nRunning Self-Play Test...")
+	fmt.Println("\n运行自对弈测试...")
 	fmt.Println("=========================")
 	
 	// Create two AIs with different parameters
@@ -98,13 +98,13 @@ func runSelfPlayTest() {
 	
 	winner, moves := simulateGame(original, optimized)
 	
-	fmt.Printf("Game completed in %d moves\n", moves)
+	fmt.Printf("游戏在 %d 步内完成\n", moves)
 	if winner == colorBlack {
-		fmt.Println("Winner: Original AI (Black)")
+		fmt.Println("获胜者: 原始AI (黑)")
 	} else if winner == colorWhite {
-		fmt.Println("Winner: Optimized AI (White)")
+		fmt.Println("获胜者: 优化AI (白)")
 	} else {
-		fmt.Println("Game ended in a draw")
+		fmt.Println("游戏平局")
 	}
 }
 
