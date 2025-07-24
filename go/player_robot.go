@@ -91,7 +91,7 @@ func newOptimizedRobotPlayer(color playerColor) player {
 	rp := &robotPlayer{
 		boardCache:        make(boardCache),
 		pColor:            color,
-		maxLevelCount:     5,        // Reduced depth for better performance
+		maxLevelCount:     4,        // Even depth for better minimax performance
 		maxCountEachLevel: 12,       // Reduced candidates for better performance
 		maxCheckmateCount: 10,       // Reduced checkmate search
 		evalParams:        getOptimizedEvaluationParams(),
