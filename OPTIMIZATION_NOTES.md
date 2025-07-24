@@ -43,7 +43,8 @@ Benchmark results show significant improvement:
 
 ### Run Performance Benchmark
 ```bash
-go run simple_benchmark.go player_robot.go board.go player.go point.go
+cd go/benchmark
+go run *.go
 ```
 
 ## Technical Details
