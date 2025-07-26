@@ -10,55 +10,55 @@ import (
 // EvaluationParams holds configurable evaluation parameters
 type EvaluationParams struct {
 	// Pattern values for evaluatePoint2
-	LiveFour      int // 活四
-	DeadFourA     int // 死四A
-	DeadFourB     int // 死四B
-	DeadFourC     int // 死四C
-	LiveThreeNear int // 活三 近3位置
-	LiveThreeBonus int // 活三额外奖励
-	LiveThreeFar   int // 活三 远3位置
-	DeadThree      int // 死三
-	DeadThreeBonus int // 死三额外奖励
-	TwoCount2      int // 活二×2的奖励
-	TwoCount1      int // 活二×1的奖励
-	ScatterMultiplier int // 散棋乘数
-	OpponentPenalty   int // 对手惩罚
+	LiveFour             int // 活四
+	DeadFourA            int // 死四A
+	DeadFourB            int // 死四B
+	DeadFourC            int // 死四C
+	LiveThreeNear        int // 活三 近3位置
+	LiveThreeBonus       int // 活三额外奖励
+	LiveThreeFar         int // 活三 远3位置
+	DeadThree            int // 死三
+	DeadThreeBonus       int // 死三额外奖励
+	TwoCount2            int // 活二×2的奖励
+	TwoCount1            int // 活二×1的奖励
+	ScatterMultiplier    int // 散棋乘数
+	OpponentPenalty      int // 对手惩罚
 	OpponentMinorPenalty int // 对手小惩罚
-	
+
 	// Pattern values for evaluateBoard
-	FiveInRow     int // 五连珠
-	FourInRowOpen int // 活四
-	FourInRowClosed int // 死四
+	FiveInRow          int            // 五连珠
+	FourInRowOpen      int            // 活四
+	FourInRowClosed    int            // 死四
 	ThreeInRowVariants map[string]int // 活三的各种变体
 }
 
 // getDefaultEvaluationParams returns the default evaluation parameters
 func getDefaultEvaluationParams() *EvaluationParams {
 	return &EvaluationParams{
-		LiveFour:      300000,
-		DeadFourA:     250000,
-		DeadFourB:     240000,
-		DeadFourC:     230000,
-		LiveThreeNear: 1450,
-		LiveThreeBonus: 6000,
-		LiveThreeFar:   350,
-		DeadThree:      700,
-		DeadThreeBonus: 6700,
-		TwoCount2:      3000,
-		TwoCount1:      2725,
-		ScatterMultiplier: 5,
-		OpponentPenalty:   500,
+		LiveFour:             300000,
+		DeadFourA:            250000,
+		DeadFourB:            240000,
+		DeadFourC:            230000,
+		LiveThreeNear:        1450,
+		LiveThreeBonus:       6000,
+		LiveThreeFar:         350,
+		DeadThree:            700,
+		DeadThreeBonus:       6700,
+		TwoCount2:            3000,
+		TwoCount1:            2725,
+		ScatterMultiplier:    5,
+		OpponentPenalty:      500,
 		OpponentMinorPenalty: 300,
-		FiveInRow:     1000000,
-		FourInRowOpen: 300000,
-		FourInRowClosed: 25000,
+		FiveInRow:            1000000,
+		FourInRowOpen:        300000,
+		FourInRowClosed:      25000,
 		ThreeInRowVariants: map[string]int{
-			"open":     22000,
-			"semi":     500,
-			"closed":   26000,
-			"gap":      800,
-			"basic":    650,
-			"corner":   150,
+			"open":   22000,
+			"semi":   500,
+			"closed": 26000,
+			"gap":    800,
+			"basic":  650,
+			"corner": 150,
 		},
 	}
 }
@@ -91,9 +91,9 @@ func newOptimizedRobotPlayer(color playerColor) player {
 	rp := &robotPlayer{
 		boardCache:        make(boardCache),
 		pColor:            color,
-		maxLevelCount:     4,        // Even depth for better minimax performance
-		maxCountEachLevel: 12,       // Reduced candidates for better performance
-		maxCheckmateCount: 10,       // Reduced checkmate search
+		maxLevelCount:     4,  // Even depth for better minimax performance
+		maxCountEachLevel: 12, // Reduced candidates for better performance
+		maxCheckmateCount: 10, // Reduced checkmate search
 		evalParams:        getOptimizedEvaluationParams(),
 	}
 	rp.initBoardStatus()
@@ -105,9 +105,9 @@ func newBalancedRobotPlayer(color playerColor) player {
 	rp := &robotPlayer{
 		boardCache:        make(boardCache),
 		pColor:            color,
-		maxLevelCount:     5,        // Balanced depth for good play and reasonable speed
-		maxCountEachLevel: 14,       // More candidates than optimized
-		maxCheckmateCount: 12,       // Full checkmate search
+		maxLevelCount:     4,  // Even depth for proper minimax evaluation
+		maxCountEachLevel: 16, // More candidates to compensate for reduced depth
+		maxCheckmateCount: 12, // Full checkmate search
 		evalParams:        getBalancedEvaluationParams(),
 	}
 	rp.initBoardStatus()
@@ -117,30 +117,30 @@ func newBalancedRobotPlayer(color playerColor) player {
 // getOptimizedEvaluationParams returns optimized evaluation parameters
 func getOptimizedEvaluationParams() *EvaluationParams {
 	return &EvaluationParams{
-		LiveFour:      320000,  // Slightly increased
-		DeadFourA:     260000,  // Slightly increased
-		DeadFourB:     245000,  // Slightly increased
-		DeadFourC:     235000,  // Slightly increased
-		LiveThreeNear: 1500,    // Slightly increased
-		LiveThreeBonus: 6200,   // Slightly increased
-		LiveThreeFar:   400,    // Slightly increased
-		DeadThree:      750,    // Slightly increased
-		DeadThreeBonus: 6800,   // Slightly increased
-		TwoCount2:      3100,   // Slightly increased
-		TwoCount1:      2800,   // Slightly increased
-		ScatterMultiplier: 6,   // Slightly increased
-		OpponentPenalty:   480, // Slightly decreased for balance
-		OpponentMinorPenalty: 280, // Slightly decreased for balance
-		FiveInRow:     1050000, // Increased for priority
-		FourInRowOpen: 315000,  // Slightly increased
-		FourInRowClosed: 26000, // Slightly increased
+		LiveFour:             320000,  // Slightly increased
+		DeadFourA:            260000,  // Slightly increased
+		DeadFourB:            245000,  // Slightly increased
+		DeadFourC:            235000,  // Slightly increased
+		LiveThreeNear:        1500,    // Slightly increased
+		LiveThreeBonus:       6200,    // Slightly increased
+		LiveThreeFar:         400,     // Slightly increased
+		DeadThree:            750,     // Slightly increased
+		DeadThreeBonus:       6800,    // Slightly increased
+		TwoCount2:            3100,    // Slightly increased
+		TwoCount1:            2800,    // Slightly increased
+		ScatterMultiplier:    6,       // Slightly increased
+		OpponentPenalty:      480,     // Slightly decreased for balance
+		OpponentMinorPenalty: 280,     // Slightly decreased for balance
+		FiveInRow:            1050000, // Increased for priority
+		FourInRowOpen:        315000,  // Slightly increased
+		FourInRowClosed:      26000,   // Slightly increased
 		ThreeInRowVariants: map[string]int{
-			"open":     23000,  // Slightly increased
-			"semi":     520,    // Slightly increased
-			"closed":   27000,  // Slightly increased
-			"gap":      850,    // Slightly increased
-			"basic":    680,    // Slightly increased
-			"corner":   160,    // Slightly increased
+			"open":   23000, // Slightly increased
+			"semi":   520,   // Slightly increased
+			"closed": 27000, // Slightly increased
+			"gap":    850,   // Slightly increased
+			"basic":  680,   // Slightly increased
+			"corner": 160,   // Slightly increased
 		},
 	}
 }
@@ -148,30 +148,30 @@ func getOptimizedEvaluationParams() *EvaluationParams {
 // getBalancedEvaluationParams returns balanced evaluation parameters for stronger play
 func getBalancedEvaluationParams() *EvaluationParams {
 	return &EvaluationParams{
-		LiveFour:      350000,  // Higher priority for winning moves
-		DeadFourA:     280000,  // Higher threat detection
-		DeadFourB:     265000,  // Higher threat detection
-		DeadFourC:     250000,  // Higher threat detection
-		LiveThreeNear: 2000,    // Improved three-in-a-row evaluation
-		LiveThreeBonus: 8000,   // Stronger bonus for good positions
-		LiveThreeFar:   500,    // Better distant threat recognition
-		DeadThree:      900,    // Improved defensive evaluation
-		DeadThreeBonus: 7500,   // Stronger defensive bonus
-		TwoCount2:      3500,   // Better two-count evaluation
-		TwoCount1:      3000,   // Better single-two evaluation
-		ScatterMultiplier: 7,   // Improved position evaluation
-		OpponentPenalty:   600, // Stronger opponent threat response
-		OpponentMinorPenalty: 350, // Better minor threat response
-		FiveInRow:     1200000, // Highest priority for wins
-		FourInRowOpen: 350000,  // Higher priority for winning threats
-		FourInRowClosed: 30000, // Better closed-four evaluation
+		LiveFour:             350000,  // Higher priority for winning moves
+		DeadFourA:            280000,  // Higher threat detection
+		DeadFourB:            265000,  // Higher threat detection
+		DeadFourC:            250000,  // Higher threat detection
+		LiveThreeNear:        2000,    // Improved three-in-a-row evaluation
+		LiveThreeBonus:       8000,    // Stronger bonus for good positions
+		LiveThreeFar:         500,     // Better distant threat recognition
+		DeadThree:            900,     // Improved defensive evaluation
+		DeadThreeBonus:       7500,    // Stronger defensive bonus
+		TwoCount2:            3500,    // Better two-count evaluation
+		TwoCount1:            3000,    // Better single-two evaluation
+		ScatterMultiplier:    7,       // Improved position evaluation
+		OpponentPenalty:      600,     // Stronger opponent threat response
+		OpponentMinorPenalty: 350,     // Better minor threat response
+		FiveInRow:            1200000, // Highest priority for wins
+		FourInRowOpen:        350000,  // Higher priority for winning threats
+		FourInRowClosed:      30000,   // Better closed-four evaluation
 		ThreeInRowVariants: map[string]int{
-			"open":     28000,  // Stronger open three evaluation
-			"semi":     650,    // Better semi-open evaluation
-			"closed":   32000,  // Stronger closed three
-			"gap":      1000,   // Better gap pattern recognition
-			"basic":    800,    // Improved basic patterns
-			"corner":   200,    // Better corner evaluation
+			"open":   28000, // Stronger open three evaluation
+			"semi":   650,   // Better semi-open evaluation
+			"closed": 32000, // Stronger closed three
+			"gap":    1000,  // Better gap pattern recognition
+			"basic":  800,   // Improved basic patterns
+			"corner": 200,   // Better corner evaluation
 		},
 	}
 }
@@ -201,7 +201,7 @@ func (r *robotPlayer) play() (point, error) {
 			return p, nil
 		}
 	}
-	
+
 	// Use iterative deepening for better time management
 	result := r.iterativeDeepening()
 	if result == nil {
@@ -214,52 +214,56 @@ func (r *robotPlayer) play() (point, error) {
 // iterativeDeepening implements iterative deepening for better time management
 func (r *robotPlayer) iterativeDeepening() *pointAndValue {
 	var bestResult *pointAndValue
-	
+
 	// Adaptive depth based on game phase and threats
 	maxDepth := r.getAdaptiveDepth()
-	
+
 	// Start with shallow searches and progressively deepen
 	for depth := 2; depth <= maxDepth; depth++ {
 		result := r.max(depth, 100000000)
 		if result != nil {
 			bestResult = result
 		}
-		
+
 		// Early termination for strong positions
 		if bestResult != nil && bestResult.value > 800000 {
 			break
 		}
-		
+
 		// If we find a very good move early, don't spend more time
 		if depth >= 4 && bestResult != nil && bestResult.value > 200000 {
 			break
 		}
 	}
-	
+
 	return bestResult
 }
 
-// getAdaptiveDepth returns adaptive search depth based on game state
+// getAdaptiveDepth returns adaptive search depth based on game state (always even)
 func (r *robotPlayer) getAdaptiveDepth() int {
 	baseDepth := r.maxLevelCount
-	
+
 	// Check for immediate threats that require deeper analysis
 	if r.hasImmediateThreats() {
-		return baseDepth + 2 // Deeper search for tactical positions
+		return baseDepth + 2 // Deeper search for tactical positions (maintains even depth)
 	}
-	
-	// In opening, use slightly less depth for speed
+
+	// In opening, use slightly less depth for speed (ensure even number)
 	if r.count < 8 {
-		return max(baseDepth - 1, 3)
+		adjusted := baseDepth - 2
+		if adjusted < 2 {
+			adjusted = 2
+		}
+		return adjusted
 	}
-	
+
 	// In middle game with many pieces, use standard depth
 	if r.count >= 8 && r.count < 20 {
 		return baseDepth
 	}
-	
-	// In endgame, use deeper search
-	return baseDepth + 1
+
+	// In endgame, use deeper search (maintain even depth)
+	return baseDepth + 2
 }
 
 // hasImmediateThreats checks if there are immediate tactical threats on the board
@@ -268,12 +272,12 @@ func (r *robotPlayer) hasImmediateThreats() bool {
 	if r.exists4(r.pColor.conversion()) {
 		return true
 	}
-	
+
 	// Check if we have 4 in a row (immediate win opportunity)
 	if r.exists4(r.pColor) {
 		return true
 	}
-	
+
 	// Check for multiple threats
 	threatsCount := r.countThreats(r.pColor) + r.countThreats(r.pColor.conversion())
 	return threatsCount >= 2
@@ -283,14 +287,14 @@ func (r *robotPlayer) hasImmediateThreats() bool {
 func (r *robotPlayer) countThreats(color playerColor) int {
 	threats := 0
 	p := point{}
-	
+
 	for i := 0; i < maxLen; i++ {
 		for j := 0; j < maxLen; j++ {
 			p.x, p.y = j, i
 			if r.get(p) == colorEmpty {
 				// Check if placing a piece here creates a threat
 				r.set(p, color)
-				
+
 				for _, dir := range fourDirections {
 					count := 1
 					// Count in positive direction
@@ -311,18 +315,18 @@ func (r *robotPlayer) countThreats(color playerColor) int {
 							break
 						}
 					}
-					
+
 					if count >= 3 {
 						threats++
 						break // Only count once per position
 					}
 				}
-				
+
 				r.set(p, colorEmpty)
 			}
 		}
 	}
-	
+
 	return threats
 }
 
@@ -490,10 +494,10 @@ func (r *robotPlayer) max(step int, foundminVal int) *pointAndValue {
 		}
 	}
 	sort.Sort(queue)
-	
+
 	// Adaptive candidate count based on game phase
 	maxCandidates := r.getAdaptiveCandidateCount(len(queue))
-	
+
 	if step == 1 {
 		if len(queue) == 0 {
 			log.Println("algorithm error")
@@ -561,10 +565,10 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 		}
 	}
 	sort.Sort(queue)
-	
+
 	// Adaptive candidate count based on game phase
 	maxCandidates := r.getAdaptiveCandidateCount(len(queue))
-	
+
 	if step == 1 {
 		if len(queue) == 0 {
 			log.Println("algorithm error")
@@ -631,6 +635,13 @@ func (r *robotPlayer) getAdaptiveCandidateCount(totalCandidates int) int {
 
 func min(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b
@@ -899,8 +910,8 @@ type pointAndValueSlice []*pointAndValue
 
 // SelfPlayResult holds the result of a self-play game
 type SelfPlayResult struct {
-	Winner playerColor
-	Moves  int
+	Winner   playerColor
+	Moves    int
 	Duration int // in milliseconds
 }
 
@@ -909,10 +920,10 @@ func (r *robotPlayer) adjustParameters(results []SelfPlayResult) {
 	if len(results) < 5 {
 		return // Need at least 5 games for adjustment
 	}
-	
+
 	winRate := r.calculateWinRate(results)
 	avgMoves := r.calculateAverageMovesPerGame(results)
-	
+
 	// If win rate is too low, make AI more aggressive
 	if winRate < 0.4 {
 		r.evalParams.LiveFour += 10000
@@ -920,13 +931,13 @@ func (r *robotPlayer) adjustParameters(results []SelfPlayResult) {
 		r.evalParams.LiveThreeNear += 100
 		r.evalParams.LiveThreeBonus += 500
 	}
-	
+
 	// If games are too long, prioritize quicker wins
 	if avgMoves > 50 {
 		r.evalParams.FiveInRow += 50000
 		r.evalParams.FourInRowOpen += 15000
 	}
-	
+
 	// If games are too short, encourage more strategic play
 	if avgMoves < 25 {
 		r.evalParams.ThreeInRowVariants["open"] += 1000
