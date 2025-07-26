@@ -100,6 +100,20 @@ func newOptimizedRobotPlayer(color playerColor) player {
 	return rp
 }
 
+// newBalancedRobotPlayer creates a robot player with balanced speed and strength
+func newBalancedRobotPlayer(color playerColor) player {
+	rp := &robotPlayer{
+		boardCache:        make(boardCache),
+		pColor:            color,
+		maxLevelCount:     5,        // Balanced depth for good play and reasonable speed
+		maxCountEachLevel: 14,       // More candidates than optimized
+		maxCheckmateCount: 12,       // Full checkmate search
+		evalParams:        getBalancedEvaluationParams(),
+	}
+	rp.initBoardStatus()
+	return rp
+}
+
 // getOptimizedEvaluationParams returns optimized evaluation parameters
 func getOptimizedEvaluationParams() *EvaluationParams {
 	return &EvaluationParams{
@@ -127,6 +141,37 @@ func getOptimizedEvaluationParams() *EvaluationParams {
 			"gap":      850,    // Slightly increased
 			"basic":    680,    // Slightly increased
 			"corner":   160,    // Slightly increased
+		},
+	}
+}
+
+// getBalancedEvaluationParams returns balanced evaluation parameters for stronger play
+func getBalancedEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:      350000,  // Higher priority for winning moves
+		DeadFourA:     280000,  // Higher threat detection
+		DeadFourB:     265000,  // Higher threat detection
+		DeadFourC:     250000,  // Higher threat detection
+		LiveThreeNear: 2000,    // Improved three-in-a-row evaluation
+		LiveThreeBonus: 8000,   // Stronger bonus for good positions
+		LiveThreeFar:   500,    // Better distant threat recognition
+		DeadThree:      900,    // Improved defensive evaluation
+		DeadThreeBonus: 7500,   // Stronger defensive bonus
+		TwoCount2:      3500,   // Better two-count evaluation
+		TwoCount1:      3000,   // Better single-two evaluation
+		ScatterMultiplier: 7,   // Improved position evaluation
+		OpponentPenalty:   600, // Stronger opponent threat response
+		OpponentMinorPenalty: 350, // Better minor threat response
+		FiveInRow:     1200000, // Highest priority for wins
+		FourInRowOpen: 350000,  // Higher priority for winning threats
+		FourInRowClosed: 30000, // Better closed-four evaluation
+		ThreeInRowVariants: map[string]int{
+			"open":     28000,  // Stronger open three evaluation
+			"semi":     650,    // Better semi-open evaluation
+			"closed":   32000,  // Stronger closed three
+			"gap":      1000,   // Better gap pattern recognition
+			"basic":    800,    // Improved basic patterns
+			"corner":   200,    // Better corner evaluation
 		},
 	}
 }
@@ -170,8 +215,11 @@ func (r *robotPlayer) play() (point, error) {
 func (r *robotPlayer) iterativeDeepening() *pointAndValue {
 	var bestResult *pointAndValue
 	
+	// Adaptive depth based on game phase and threats
+	maxDepth := r.getAdaptiveDepth()
+	
 	// Start with shallow searches and progressively deepen
-	for depth := 2; depth <= r.maxLevelCount; depth++ {
+	for depth := 2; depth <= maxDepth; depth++ {
 		result := r.max(depth, 100000000)
 		if result != nil {
 			bestResult = result
@@ -181,9 +229,101 @@ func (r *robotPlayer) iterativeDeepening() *pointAndValue {
 		if bestResult != nil && bestResult.value > 800000 {
 			break
 		}
+		
+		// If we find a very good move early, don't spend more time
+		if depth >= 4 && bestResult != nil && bestResult.value > 200000 {
+			break
+		}
 	}
 	
 	return bestResult
+}
+
+// getAdaptiveDepth returns adaptive search depth based on game state
+func (r *robotPlayer) getAdaptiveDepth() int {
+	baseDepth := r.maxLevelCount
+	
+	// Check for immediate threats that require deeper analysis
+	if r.hasImmediateThreats() {
+		return baseDepth + 2 // Deeper search for tactical positions
+	}
+	
+	// In opening, use slightly less depth for speed
+	if r.count < 8 {
+		return max(baseDepth - 1, 3)
+	}
+	
+	// In middle game with many pieces, use standard depth
+	if r.count >= 8 && r.count < 20 {
+		return baseDepth
+	}
+	
+	// In endgame, use deeper search
+	return baseDepth + 1
+}
+
+// hasImmediateThreats checks if there are immediate tactical threats on the board
+func (r *robotPlayer) hasImmediateThreats() bool {
+	// Check if opponent has 4 in a row (immediate win threat)
+	if r.exists4(r.pColor.conversion()) {
+		return true
+	}
+	
+	// Check if we have 4 in a row (immediate win opportunity)
+	if r.exists4(r.pColor) {
+		return true
+	}
+	
+	// Check for multiple threats
+	threatsCount := r.countThreats(r.pColor) + r.countThreats(r.pColor.conversion())
+	return threatsCount >= 2
+}
+
+// countThreats counts the number of three-in-a-row threats for a given color
+func (r *robotPlayer) countThreats(color playerColor) int {
+	threats := 0
+	p := point{}
+	
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			if r.get(p) == colorEmpty {
+				// Check if placing a piece here creates a threat
+				r.set(p, color)
+				
+				for _, dir := range fourDirections {
+					count := 1
+					// Count in positive direction
+					for k := 1; k < 5; k++ {
+						pk := p.move(dir, k)
+						if pk.checkRange() && r.get(pk) == color {
+							count++
+						} else {
+							break
+						}
+					}
+					// Count in negative direction
+					for k := 1; k < 5; k++ {
+						pk := p.move(dir, -k)
+						if pk.checkRange() && r.get(pk) == color {
+							count++
+						} else {
+							break
+						}
+					}
+					
+					if count >= 3 {
+						threats++
+						break // Only count once per position
+					}
+				}
+				
+				r.set(p, colorEmpty)
+			}
+		}
+	}
+	
+	return threats
 }
 
 func (r *robotPlayer) calculateKill(color playerColor, aggressive bool, step int) (point, bool) {

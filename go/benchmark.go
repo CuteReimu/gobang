@@ -23,14 +23,26 @@ func benchmarkAI() {
 	optimizedTime := measureAIThinkingTime(optimizedRobot)
 	fmt.Printf("优化AI平均思考时间: %.2f 秒\n", optimizedTime)
 	
-	// Calculate improvement
-	improvement := ((originalTime - optimizedTime) / originalTime) * 100
-	fmt.Printf("\n性能提升: %.1f%%\n", improvement)
+	// Test balanced AI
+	fmt.Println("\n测试平衡AI...")
+	balancedRobot := newBalancedRobotPlayer(colorBlack).(*robotPlayer)
+	balancedTime := measureAIThinkingTime(balancedRobot)
+	fmt.Printf("平衡AI平均思考时间: %.2f 秒\n", balancedTime)
 	
-	if improvement > 0 {
-		fmt.Printf("优化AI快了 %.1f倍\n", originalTime/optimizedTime)
-	} else {
-		fmt.Println("优化AI没有更快 (可能需要更多调优)")
+	// Calculate improvements
+	optimizedImprovement := ((originalTime - optimizedTime) / originalTime) * 100
+	balancedImprovement := ((originalTime - balancedTime) / originalTime) * 100
+	
+	fmt.Printf("\n性能对比:\n")
+	fmt.Printf("- 原始AI: %.2f 秒/步\n", originalTime)
+	fmt.Printf("- 优化AI: %.2f 秒/步 (提升 %.1f%%)\n", optimizedTime, optimizedImprovement)
+	fmt.Printf("- 平衡AI: %.2f 秒/步 (提升 %.1f%%)\n", balancedTime, balancedImprovement)
+	
+	if optimizedImprovement > 0 {
+		fmt.Printf("- 优化AI快了 %.1f倍\n", originalTime/optimizedTime)
+	}
+	if balancedImprovement > 0 {
+		fmt.Printf("- 平衡AI快了 %.1f倍\n", originalTime/balancedTime)
 	}
 }
 
