@@ -10,19 +10,21 @@ import (
 func main() {
 	optimized := flag.Bool("optimized", false, "使用优化AI参数以获得更好性能")
 	balanced := flag.Bool("balanced", false, "使用平衡AI参数以获得更强棋力和合理速度")
+	enhanced := flag.Bool("enhanced", false, "使用增强AI算法以获得6层深度的强棋力和优化性能")
 	benchmark := flag.Bool("benchmark", false, "运行AI性能基准测试")
 	flag.Parse()
 
 	if *benchmark {
 		benchmarkAI()
 		runSelfPlayTest()
+		runEnhancedAIBenchmark()
 		return
 	}
 
-	runGameWithGUI(*optimized, *balanced)
+	runGameWithGUI(*optimized, *balanced, *enhanced)
 }
 
-func runGameWithGUI(optimized, balanced bool) {
+func runGameWithGUI(optimized, balanced, enhanced bool) {
 	hp := newHumanPlayer(colorWhite)
 	//hp := newHumanWatcher()
 	go func() {
@@ -32,7 +34,10 @@ func runGameWithGUI(optimized, balanced bool) {
 		}
 		
 		var robot player
-		if balanced {
+		if enhanced {
+			robot = newEnhancedRobotPlayer(colorBlack)
+			fmt.Println("使用增强AI算法以获得6层深度的强棋力和优化性能")
+		} else if balanced {
 			robot = newBalancedRobotPlayer(colorBlack)
 			fmt.Println("使用平衡AI参数以获得更强棋力和合理速度")
 		} else if optimized {

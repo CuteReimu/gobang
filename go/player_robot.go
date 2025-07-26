@@ -114,6 +114,25 @@ func newBalancedRobotPlayer(color playerColor) player {
 	return rp
 }
 
+// newEnhancedRobotPlayer creates a robot player with 6-layer depth and algorithmic optimizations
+func newEnhancedRobotPlayer(color playerColor) player {
+	rp := &enhancedRobotPlayer{
+		robotPlayer: robotPlayer{
+			boardCache:        make(boardCache),
+			pColor:            color,
+			maxLevelCount:     6,  // Maintain 6 layers as requested
+			maxCountEachLevel: 14, // Slightly reduced for performance
+			maxCheckmateCount: 12, // Full checkmate search
+			evalParams:        getEnhancedEvaluationParams(),
+		},
+		killerMoves:    make(map[int][2]point), // Killer move heuristic
+		historyTable:   make(map[point]int),    // History heuristic
+		aspirationWindow: 50000,                // Aspiration window size
+	}
+	rp.initBoardStatus()
+	return rp
+}
+
 // getOptimizedEvaluationParams returns optimized evaluation parameters
 func getOptimizedEvaluationParams() *EvaluationParams {
 	return &EvaluationParams{
@@ -174,6 +193,46 @@ func getBalancedEvaluationParams() *EvaluationParams {
 			"corner": 200,   // Better corner evaluation
 		},
 	}
+}
+
+// getEnhancedEvaluationParams returns enhanced evaluation parameters for 6-layer AI
+func getEnhancedEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:             400000,  // Very high priority for winning moves
+		DeadFourA:            320000,  // Strong threat detection
+		DeadFourB:            300000,  // Strong threat detection  
+		DeadFourC:            280000,  // Strong threat detection
+		LiveThreeNear:        2500,    // Enhanced three-in-a-row evaluation
+		LiveThreeBonus:       9000,    // Strong bonus for good positions
+		LiveThreeFar:         600,     // Better distant threat recognition
+		DeadThree:            1100,    // Enhanced defensive evaluation
+		DeadThreeBonus:       8500,    // Strong defensive bonus
+		TwoCount2:            4000,    // Enhanced two-count evaluation
+		TwoCount1:            3500,    // Enhanced single-two evaluation
+		ScatterMultiplier:    8,       // Enhanced position evaluation
+		OpponentPenalty:      700,     // Strong opponent threat response
+		OpponentMinorPenalty: 400,     // Enhanced minor threat response
+		FiveInRow:            1500000, // Maximum priority for wins
+		FourInRowOpen:        400000,  // Maximum priority for winning threats
+		FourInRowClosed:      35000,   // Enhanced closed-four evaluation
+		ThreeInRowVariants: map[string]int{
+			"open":   35000, // Enhanced open three evaluation
+			"semi":   800,   // Enhanced semi-open evaluation
+			"closed": 40000, // Enhanced closed three
+			"gap":    1200,  // Enhanced gap pattern recognition
+			"basic":  1000,  // Enhanced basic patterns
+			"corner": 250,   // Enhanced corner evaluation
+		},
+	}
+}
+
+// enhancedRobotPlayer extends robotPlayer with advanced optimizations for 6-layer depth
+type enhancedRobotPlayer struct {
+	robotPlayer
+	killerMoves      map[int][2]point // Killer moves for each depth level
+	historyTable     map[point]int    // History heuristic table
+	aspirationWindow int              // Aspiration window size
+	nodeCount        int              // Node count for debugging
 }
 
 func (r *robotPlayer) color() playerColor {
@@ -640,13 +699,6 @@ func min(a, b int) int {
 	return b
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func (r *robotPlayer) evaluatePoint(p point, color playerColor) int {
 	return r.evaluatePoint2(p, color, colorBlack) + r.evaluatePoint2(p, color, colorWhite)
 }
@@ -997,4 +1049,374 @@ func (s pointAndValueSlice) Less(i, j int) bool {
 
 func (s pointAndValueSlice) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
+}
+
+// Enhanced AI methods with algorithmic optimizations for 6-layer depth
+
+// play method for enhanced robot player with optimizations
+func (r *enhancedRobotPlayer) play() (point, error) {
+	r.nodeCount = 0 // Reset node count
+	
+	if r.count == 0 {
+		p := point{maxLen / 2, maxLen / 2}
+		r.set(p, r.pColor)
+		return p, nil
+	}
+	
+	// Quick win/defense checks (same as original)
+	p1, ok := r.findForm5(r.pColor)
+	if ok {
+		r.set(p1, r.pColor)
+		return p1, nil
+	}
+	p1, ok = r.stop4(r.pColor)
+	if ok {
+		r.set(p1, r.pColor)
+		return p1, nil
+	}
+	
+	// Enhanced checkmate calculation with reduced iterations for performance
+	for i := 2; i <= r.maxCheckmateCount; i += 2 {
+		if p, ok := r.calculateKill(r.pColor, true, i); ok {
+			return p, nil
+		}
+	}
+
+	// Use enhanced iterative deepening with aspiration windows
+	result := r.enhancedIterativeDeepening()
+	if result == nil {
+		return point{}, errors.New("algorithm error")
+	}
+	
+	// Update history table for this move
+	r.historyTable[result.p]++
+	
+	r.set(result.p, r.pColor)
+	return result.p, nil
+}
+
+// enhancedIterativeDeepening with aspiration windows and better time management
+func (r *enhancedRobotPlayer) enhancedIterativeDeepening() *pointAndValue {
+	var bestResult *pointAndValue
+	alpha := -1000000000
+	beta := 1000000000
+	
+	// Start with aspiration window around the previous best value
+	if bestResult != nil {
+		alpha = bestResult.value - r.aspirationWindow
+		beta = bestResult.value + r.aspirationWindow
+	}
+	
+	// Progressive deepening with aspiration windows
+	for depth := 2; depth <= r.maxLevelCount; depth += 2 { // Even depths only
+		result := r.enhancedMax(depth, alpha, beta)
+		
+		if result == nil {
+			// Aspiration window failed, research with full window
+			result = r.enhancedMax(depth, -1000000000, 1000000000)
+		}
+		
+		if result != nil {
+			bestResult = result
+			
+			// Adjust aspiration window for next iteration
+			alpha = result.value - r.aspirationWindow
+			beta = result.value + r.aspirationWindow
+		}
+		
+		// Early termination for very strong positions
+		if bestResult != nil && bestResult.value > 900000 {
+			break
+		}
+		
+		// If we find a good move and are beyond minimum depth, consider stopping
+		if depth >= 4 && bestResult != nil && bestResult.value > 300000 {
+			break
+		}
+	}
+	
+	return bestResult
+}
+
+// enhancedMax with improved alpha-beta pruning and move ordering
+func (r *enhancedRobotPlayer) enhancedMax(step int, alpha, beta int) *pointAndValue {
+	r.nodeCount++
+	
+	// Check cache first
+	if v := r.getFromCache(r.hash, step); v != nil {
+		return v
+	}
+	
+	// Generate and evaluate moves
+	var queue pointAndValueSlice
+	p := point{}
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			if r.get(p) == 0 && r.isNeighbor(p) {
+				evathis := r.evaluatePoint(p, r.pColor)
+				
+				// Apply history heuristic bonus
+				if bonus, exists := r.historyTable[p]; exists {
+					evathis += bonus * 10
+				}
+				
+				// Apply killer move bonus
+				if killers, exists := r.killerMoves[step]; exists {
+					if p == killers[0] {
+						evathis += 50000 // First killer
+					} else if p == killers[1] {
+						evathis += 25000 // Second killer
+					}
+				}
+				
+				queue = append(queue, &pointAndValue{p, evathis})
+			}
+		}
+	}
+	sort.Sort(queue)
+	
+	// Adaptive candidate selection - more aggressive pruning
+	maxCandidates := r.getEnhancedCandidateCount(len(queue), step)
+	
+	if step == 1 {
+		if len(queue) == 0 {
+			log.Println("algorithm error")
+			return nil
+		}
+		p = queue[0].p
+		r.setIfEmpty(p, r.pColor)
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		r.set(p, colorEmpty)
+		result := &pointAndValue{p, val}
+		r.putIntoCache(r.hash, step, result)
+		return result
+	}
+	
+	maxPoint := point{}
+	maxVal := alpha
+	moveCount := 0
+	
+	for _, obj := range queue {
+		if moveCount >= maxCandidates {
+			break
+		}
+		moveCount++
+		
+		p = obj.p
+		r.set(p, r.pColor)
+		
+		// Quick evaluation for early termination
+		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		if boardVal > 800000 {
+			r.set(p, 0)
+			result := &pointAndValue{p, boardVal}
+			r.putIntoCache(r.hash, step, result)
+			return result
+		}
+		
+		// Late Move Reduction (LMR) - search later moves with reduced depth
+		if moveCount > 4 && step > 3 && boardVal < 100000 {
+			// Search with reduced depth first
+			reducedResult := r.enhancedMin(step-2, maxVal, beta)
+			if reducedResult != nil && reducedResult.value <= maxVal {
+				// If reduced search fails low, skip full search
+				r.set(p, 0)
+				continue
+			}
+		}
+		
+		evathisResult := r.enhancedMin(step-1, maxVal, beta)
+		if evathisResult == nil {
+			r.set(p, 0)
+			continue
+		}
+		
+		evalValue := evathisResult.value
+		
+		// Alpha-beta pruning
+		if evalValue >= beta {
+			r.set(p, 0)
+			
+			// Store killer move
+			r.updateKillerMove(step, p)
+			
+			result := &pointAndValue{p, evalValue}
+			r.putIntoCache(r.hash, step, result)
+			return result
+		}
+		
+		if evalValue > maxVal {
+			maxVal = evalValue
+			maxPoint = p
+		}
+		
+		r.set(p, 0)
+	}
+	
+	if maxVal <= alpha {
+		return nil
+	}
+	
+	result := &pointAndValue{maxPoint, maxVal}
+	r.putIntoCache(r.hash, step, result)
+	return result
+}
+
+// enhancedMin with improved alpha-beta pruning and move ordering
+func (r *enhancedRobotPlayer) enhancedMin(step int, alpha, beta int) *pointAndValue {
+	r.nodeCount++
+	
+	// Check cache first
+	if v := r.getFromCache(r.hash, step); v != nil {
+		return v
+	}
+	
+	// Generate and evaluate moves
+	var queue pointAndValueSlice
+	p := point{}
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			if r.get(p) == 0 && r.isNeighbor(p) {
+				evathis := r.evaluatePoint(p, r.pColor.conversion())
+				
+				// Apply history heuristic bonus
+				if bonus, exists := r.historyTable[p]; exists {
+					evathis += bonus * 10
+				}
+				
+				// Apply killer move bonus
+				if killers, exists := r.killerMoves[step]; exists {
+					if p == killers[0] {
+						evathis += 50000 // First killer
+					} else if p == killers[1] {
+						evathis += 25000 // Second killer
+					}
+				}
+				
+				queue = append(queue, &pointAndValue{p, evathis})
+			}
+		}
+	}
+	sort.Sort(queue)
+	
+	// Adaptive candidate selection
+	maxCandidates := r.getEnhancedCandidateCount(len(queue), step)
+	
+	if step == 1 {
+		if len(queue) == 0 {
+			log.Println("algorithm error")
+			return nil
+		}
+		p := queue[0].p
+		r.setIfEmpty(p, r.pColor.conversion())
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		r.set(p, 0)
+		result := &pointAndValue{p, val}
+		r.putIntoCache(r.hash, step, result)
+		return result
+	}
+	
+	var minPoint point
+	minVal := beta
+	moveCount := 0
+	
+	for _, obj := range queue {
+		if moveCount >= maxCandidates {
+			break
+		}
+		moveCount++
+		
+		p = obj.p
+		r.set(p, r.pColor.conversion())
+		
+		// Quick evaluation for early termination
+		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		if boardVal < -800000 {
+			r.set(p, 0)
+			result := &pointAndValue{p, boardVal}
+			r.putIntoCache(r.hash, step, result)
+			return result
+		}
+		
+		// Late Move Reduction (LMR)
+		if moveCount > 4 && step > 3 && boardVal > -100000 {
+			// Search with reduced depth first
+			reducedResult := r.enhancedMax(step-2, alpha, minVal)
+			if reducedResult != nil && reducedResult.value >= minVal {
+				// If reduced search fails high, skip full search
+				r.set(p, 0)
+				continue
+			}
+		}
+		
+		evathisResult := r.enhancedMax(step-1, alpha, minVal)
+		if evathisResult == nil {
+			r.set(p, 0)
+			continue
+		}
+		
+		evalValue := evathisResult.value
+		
+		// Alpha-beta pruning
+		if evalValue <= alpha {
+			r.set(p, 0)
+			
+			// Store killer move
+			r.updateKillerMove(step, p)
+			
+			result := &pointAndValue{p, evalValue}
+			r.putIntoCache(r.hash, step, result)
+			return result
+		}
+		
+		if evalValue < minVal {
+			minVal = evalValue
+			minPoint = p
+		}
+		
+		r.set(p, 0)
+	}
+	
+	if minVal >= beta {
+		return nil
+	}
+	
+	result := &pointAndValue{minPoint, minVal}
+	r.putIntoCache(r.hash, step, result)
+	return result
+}
+
+// getEnhancedCandidateCount returns more aggressive candidate pruning
+func (r *enhancedRobotPlayer) getEnhancedCandidateCount(totalCandidates, depth int) int {
+	baseCount := r.maxCountEachLevel
+	
+	// More aggressive pruning at deeper levels
+	if depth <= 2 {
+		baseCount += 4 // More candidates near leaf nodes
+	} else if depth >= 4 {
+		baseCount -= 2 // Fewer candidates at deeper levels
+	}
+	
+	// Game phase adaptive adjustment
+	if r.count < 8 {
+		baseCount += 2 // Early game - more exploration
+	} else if r.count > 20 {
+		baseCount -= 3 // Late game - more focused search
+	}
+	
+	return min(baseCount, totalCandidates)
+}
+
+// updateKillerMove updates the killer move table
+func (r *enhancedRobotPlayer) updateKillerMove(depth int, move point) {
+	killers := r.killerMoves[depth]
+	
+	// Shift killer moves
+	if killers[0] != move {
+		killers[1] = killers[0]
+		killers[0] = move
+		r.killerMoves[depth] = killers
+	}
 }
