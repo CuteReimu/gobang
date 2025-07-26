@@ -116,21 +116,26 @@ func newBalancedRobotPlayer(color playerColor) player {
 
 // newEnhancedRobotPlayer creates a robot player with 6-layer depth and algorithmic optimizations
 func newEnhancedRobotPlayer(color playerColor) player {
-	rp := &enhancedRobotPlayer{
+	rp := &leanEnhancedRobotPlayer{
 		robotPlayer: robotPlayer{
 			boardCache:        make(boardCache),
 			pColor:            color,
 			maxLevelCount:     6,  // Maintain 6 layers as requested
-			maxCountEachLevel: 14, // Slightly reduced for performance
+			maxCountEachLevel: 12, // More aggressive candidate pruning
 			maxCheckmateCount: 12, // Full checkmate search
 			evalParams:        getEnhancedEvaluationParams(),
 		},
-		killerMoves:    make(map[int][2]point), // Killer move heuristic
-		historyTable:   make(map[point]int),    // History heuristic
-		aspirationWindow: 50000,                // Aspiration window size
+		evalCache: make(map[uint64]int), // Simple evaluation cache
 	}
 	rp.initBoardStatus()
 	return rp
+}
+
+// leanEnhancedRobotPlayer - simplified enhanced AI focused on real performance gains
+type leanEnhancedRobotPlayer struct {
+	robotPlayer
+	evalCache map[uint64]int // Cache for position evaluations
+	nodeCount int            // For debugging
 }
 
 // getOptimizedEvaluationParams returns optimized evaluation parameters
@@ -1419,4 +1424,312 @@ func (r *enhancedRobotPlayer) updateKillerMove(depth int, move point) {
 		killers[0] = move
 		r.killerMoves[depth] = killers
 	}
+}
+
+// Lean Enhanced AI methods with focused optimizations for 6-layer depth
+
+// play method for lean enhanced robot player
+func (r *leanEnhancedRobotPlayer) play() (point, error) {
+	r.nodeCount = 0 // Reset node count
+	
+	if r.count == 0 {
+		p := point{maxLen / 2, maxLen / 2}
+		r.set(p, r.pColor)
+		return p, nil
+	}
+	
+	// Quick win/defense checks
+	p1, ok := r.findForm5(r.pColor)
+	if ok {
+		r.set(p1, r.pColor)
+		return p1, nil
+	}
+	p1, ok = r.stop4(r.pColor)
+	if ok {
+		r.set(p1, r.pColor)
+		return p1, nil
+	}
+	
+	// Quick checkmate search with reduced iterations for performance
+	for i := 2; i <= min(r.maxCheckmateCount, 8); i += 2 {
+		if p, ok := r.calculateKill(r.pColor, true, i); ok {
+			return p, nil
+		}
+	}
+
+	// Use optimized iterative deepening
+	result := r.optimizedIterativeDeepening()
+	if result == nil {
+		return point{}, errors.New("algorithm error")
+	}
+	
+	r.set(result.p, r.pColor)
+	return result.p, nil
+}
+
+// optimizedIterativeDeepening with better time management and early termination
+func (r *leanEnhancedRobotPlayer) optimizedIterativeDeepening() *pointAndValue {
+	var bestResult *pointAndValue
+	
+	// Start with shallow search and progressively deepen
+	for depth := 2; depth <= r.maxLevelCount; depth += 2 {
+		result := r.optimizedMax(depth, -1000000000, 1000000000)
+		
+		if result != nil {
+			bestResult = result
+		}
+		
+		// Early termination for very strong positions
+		if bestResult != nil && bestResult.value > 800000 {
+			break
+		}
+		
+		// If we find a good move early and we're past minimum depth, consider stopping
+		if depth >= 4 && bestResult != nil && bestResult.value > 300000 {
+			break
+		}
+		
+		// For mid-to-late game, if we have a decent move, don't spend too much time
+		if r.count > 15 && depth >= 4 && bestResult != nil && bestResult.value > 50000 {
+			break
+		}
+	}
+	
+	return bestResult
+}
+
+// optimizedMax with focused optimizations
+func (r *leanEnhancedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAndValue {
+	r.nodeCount++
+	
+	// Check cache first
+	if v := r.getFromCache(r.hash, step); v != nil {
+		return v
+	}
+	
+	// Generate candidates with aggressive pruning
+	candidates := r.getOptimizedCandidates(r.pColor)
+	
+	// More aggressive candidate limit based on game phase
+	maxCandidates := r.getAdaptiveCandidateLimit(len(candidates), step)
+	if len(candidates) > maxCandidates {
+		candidates = candidates[:maxCandidates]
+	}
+	
+	if step == 1 {
+		if len(candidates) == 0 {
+			return nil
+		}
+		p := candidates[0].p
+		r.setIfEmpty(p, r.pColor)
+		val := r.fastEvaluate(r.pColor)
+		r.set(p, colorEmpty)
+		result := &pointAndValue{p, val}
+		r.putIntoCache(r.hash, step, result)
+		return result
+	}
+	
+	maxPoint := point{}
+	maxVal := alpha
+	
+	for i, candidate := range candidates {
+		if i >= maxCandidates {
+			break
+		}
+		
+		p := candidate.p
+		r.set(p, r.pColor)
+		
+		// Quick evaluation for early termination
+		boardVal := r.fastEvaluate(r.pColor)
+		if boardVal > 800000 {
+			r.set(p, 0)
+			result := &pointAndValue{p, boardVal}
+			r.putIntoCache(r.hash, step, result)
+			return result
+		}
+		
+		minResult := r.optimizedMin(step-1, maxVal, beta)
+		if minResult == nil {
+			r.set(p, 0)
+			continue
+		}
+		
+		evalValue := minResult.value
+		
+		// Alpha-beta pruning
+		if evalValue >= beta {
+			r.set(p, 0)
+			result := &pointAndValue{p, evalValue}
+			r.putIntoCache(r.hash, step, result)
+			return result
+		}
+		
+		if evalValue > maxVal {
+			maxVal = evalValue
+			maxPoint = p
+		}
+		
+		r.set(p, 0)
+	}
+	
+	if maxVal <= alpha {
+		return nil
+	}
+	
+	result := &pointAndValue{maxPoint, maxVal}
+	r.putIntoCache(r.hash, step, result)
+	return result
+}
+
+// optimizedMin with focused optimizations
+func (r *leanEnhancedRobotPlayer) optimizedMin(step int, alpha, beta int) *pointAndValue {
+	r.nodeCount++
+	
+	// Check cache first
+	if v := r.getFromCache(r.hash, step); v != nil {
+		return v
+	}
+	
+	// Generate candidates with aggressive pruning
+	candidates := r.getOptimizedCandidates(r.pColor.conversion())
+	
+	// More aggressive candidate limit
+	maxCandidates := r.getAdaptiveCandidateLimit(len(candidates), step)
+	if len(candidates) > maxCandidates {
+		candidates = candidates[:maxCandidates]
+	}
+	
+	if step == 1 {
+		if len(candidates) == 0 {
+			return nil
+		}
+		p := candidates[0].p
+		r.setIfEmpty(p, r.pColor.conversion())
+		val := r.fastEvaluate(r.pColor)
+		r.set(p, 0)
+		result := &pointAndValue{p, val}
+		r.putIntoCache(r.hash, step, result)
+		return result
+	}
+	
+	var minPoint point
+	minVal := beta
+	
+	for i, candidate := range candidates {
+		if i >= maxCandidates {
+			break
+		}
+		
+		p := candidate.p
+		r.set(p, r.pColor.conversion())
+		
+		// Quick evaluation for early termination
+		boardVal := r.fastEvaluate(r.pColor)
+		if boardVal < -800000 {
+			r.set(p, 0)
+			result := &pointAndValue{p, boardVal}
+			r.putIntoCache(r.hash, step, result)
+			return result
+		}
+		
+		maxResult := r.optimizedMax(step-1, alpha, minVal)
+		if maxResult == nil {
+			r.set(p, 0)
+			continue
+		}
+		
+		evalValue := maxResult.value
+		
+		// Alpha-beta pruning
+		if evalValue <= alpha {
+			r.set(p, 0)
+			result := &pointAndValue{p, evalValue}
+			r.putIntoCache(r.hash, step, result)
+			return result
+		}
+		
+		if evalValue < minVal {
+			minVal = evalValue
+			minPoint = p
+		}
+		
+		r.set(p, 0)
+	}
+	
+	if minVal >= beta {
+		return nil
+	}
+	
+	result := &pointAndValue{minPoint, minVal}
+	r.putIntoCache(r.hash, step, result)
+	return result
+}
+
+// getOptimizedCandidates returns better sorted candidates with aggressive pruning
+func (r *leanEnhancedRobotPlayer) getOptimizedCandidates(color playerColor) []*pointAndValue {
+	var candidates []*pointAndValue
+	
+	// Generate candidates only in areas of interest
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p := point{j, i}
+			if r.get(p) == 0 && r.isNeighbor(p) {
+				eval := r.evaluatePoint(p, color)
+				candidates = append(candidates, &pointAndValue{p, eval})
+			}
+		}
+	}
+	
+	// Sort by evaluation
+	sort.Sort(pointAndValueSlice(candidates))
+	
+	return candidates
+}
+
+// getAdaptiveCandidateLimit returns adaptive candidate limits for better performance
+func (r *leanEnhancedRobotPlayer) getAdaptiveCandidateLimit(totalCandidates, depth int) int {
+	// Base limit is smaller than original for better performance
+	baseLimit := r.maxCountEachLevel
+	
+	// Reduce candidates more aggressively at deeper levels
+	if depth <= 2 {
+		baseLimit += 2 // Slightly more at leaf levels
+	} else if depth >= 4 {
+		baseLimit -= 4 // Much fewer at deeper levels
+	}
+	
+	// Game phase adaptation - more aggressive pruning in late game
+	if r.count < 8 {
+		baseLimit += 1 // Early game - slightly more exploration
+	} else if r.count > 20 {
+		baseLimit -= 5 // Late game - much more focused
+	}
+	
+	// Never exceed total available candidates
+	return min(baseLimit, totalCandidates)
+}
+
+// fastEvaluate - optimized evaluation with caching
+func (r *leanEnhancedRobotPlayer) fastEvaluate(color playerColor) int {
+	// Check cache first
+	if cached, exists := r.evalCache[r.hash]; exists {
+		return cached
+	}
+	
+	// Compute evaluation
+	myEval := r.evaluateBoard(color)
+	oppEval := r.evaluateBoard(color.conversion())
+	result := myEval - oppEval
+	
+	// Cache the result
+	r.evalCache[r.hash] = result
+	
+	// Limit cache size to prevent memory issues
+	if len(r.evalCache) > 10000 {
+		// Clear cache when it gets too large
+		r.evalCache = make(map[uint64]int)
+	}
+	
+	return result
 }

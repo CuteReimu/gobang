@@ -11,7 +11,7 @@ func main() {
 	
 	// Test enhanced AI
 	fmt.Println("\n创建增强AI（6层深度）...")
-	enhanced := newEnhancedRobotPlayer(colorBlack).(*enhancedRobotPlayer)
+	enhanced := newEnhancedRobotPlayer(colorBlack).(*leanEnhancedRobotPlayer)
 	
 	// Test first move
 	fmt.Println("测试第一步（应该是中心位置）...")
@@ -74,7 +74,7 @@ func main() {
 
 func testMidGame() {
 	// Create a mid-game scenario
-	enhanced := newEnhancedRobotPlayer(colorBlack).(*enhancedRobotPlayer)
+	enhanced := newEnhancedRobotPlayer(colorBlack).(*leanEnhancedRobotPlayer)
 	original := newRobotPlayer(colorBlack).(*robotPlayer)
 	
 	// Set up identical board positions for both AIs
