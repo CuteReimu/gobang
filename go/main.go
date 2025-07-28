@@ -32,7 +32,7 @@ func runGameWithGUI(optimized, balanced, enhanced bool) {
 		for i := 0; i < maxLen; i++ {
 			board[i] = make([]playerColor, maxLen)
 		}
-		
+
 		var robot player
 		if enhanced {
 			robot = newEnhancedRobotPlayer(colorBlack)
@@ -47,7 +47,7 @@ func runGameWithGUI(optimized, balanced, enhanced bool) {
 			robot = newRobotPlayer(colorBlack)
 			fmt.Println("使用默认AI参数")
 		}
-		
+
 		players := []player{robot, hp} // 机器人先
 		//players := []player{hp, newRobotPlayer(colorWhite)} // 玩家先
 		//players := []player{newRobotPlayer(colorBlack), newRobotPlayer(colorWhite)}
