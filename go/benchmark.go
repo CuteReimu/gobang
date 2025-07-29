@@ -250,7 +250,7 @@ func runEnhancedAIComparison() {
 		speedup := float64(originalTime) / float64(enhancedTime)
 		fmt.Printf("Original AI (6层):  %v\n", originalTime)
 		fmt.Printf("Enhanced AI (6层):  %v\n", enhancedTime)
-		fmt.Printf("Enhanced AI nodes: %d\n", enhanced.nodeCount)
+		fmt.Printf("Enhanced AI nodes: %d\n", enhanced.(*leanEnhancedRobotPlayer).nodeCount)
 		if speedup >= 1.0 {
 			fmt.Printf("性能提升: %.1fx 更快\n", speedup)
 		} else {
