@@ -18,6 +18,8 @@ func main() {
 		benchmarkAI()
 		runSelfPlayTest()
 		runEnhancedAIBenchmark()
+		testPerformance()
+		testLogicErrors()
 		return
 	}
 
