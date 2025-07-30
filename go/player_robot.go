@@ -92,8 +92,8 @@ func newOptimizedRobotPlayer(color playerColor) player {
 		robotPlayer: robotPlayer{
 			boardCache:        make(boardCache),
 			pColor:            color,
-			maxLevelCount:     4,  // Even depth for better minimax performance
-			maxCountEachLevel: 16, // Increased candidates for better tactics
+			maxLevelCount:     6,  // Increased to 6 layers for better tactical strength
+			maxCountEachLevel: 18, // More candidates for better tactical analysis
 			maxCheckmateCount: 12, // Full checkmate search for tactical strength
 			evalParams:        getImprovedOptimizedEvaluationParams(),
 		},
@@ -151,30 +151,30 @@ type leanEnhancedRobotPlayer struct {
 // getImprovedOptimizedEvaluationParams returns improved optimized evaluation parameters with better tactical awareness
 func getImprovedOptimizedEvaluationParams() *EvaluationParams {
 	return &EvaluationParams{
-		LiveFour:             380000,  // Higher priority for winning moves
-		DeadFourA:            300000,  // Better threat detection
-		DeadFourB:            280000,  // Better threat detection
-		DeadFourC:            260000,  // Better threat detection
-		LiveThreeNear:        2200,    // Enhanced three-in-a-row evaluation
-		LiveThreeBonus:       7500,    // Better tactical evaluation
-		LiveThreeFar:         550,     // Better distant threat recognition
-		DeadThree:            850,     // Enhanced defensive evaluation
-		DeadThreeBonus:       7200,    // Better defensive bonus
-		TwoCount2:            3800,    // Better two-count evaluation
-		TwoCount1:            3200,    // Better single-two evaluation
-		ScatterMultiplier:    7,       // Enhanced position evaluation
-		OpponentPenalty:      580,     // Better opponent threat response
-		OpponentMinorPenalty: 320,     // Better minor threat response
-		FiveInRow:            1200000, // Maximum priority for wins
-		FourInRowOpen:        370000,  // Higher priority for winning threats
-		FourInRowClosed:      32000,   // Better closed-four evaluation
+		LiveFour:             450000,  // Much higher priority for winning moves
+		DeadFourA:            380000,  // Enhanced threat detection
+		DeadFourB:            360000,  // Enhanced threat detection
+		DeadFourC:            340000,  // Enhanced threat detection
+		LiveThreeNear:        3000,    // Much better three-in-a-row evaluation
+		LiveThreeBonus:       10000,   // Stronger tactical evaluation
+		LiveThreeFar:         750,     // Better distant threat recognition
+		DeadThree:            1200,    // Enhanced defensive evaluation
+		DeadThreeBonus:       9000,    // Strong defensive bonus
+		TwoCount2:            5000,    // Better two-count evaluation
+		TwoCount1:            4200,    // Better single-two evaluation
+		ScatterMultiplier:    9,       // Enhanced position evaluation
+		OpponentPenalty:      750,     // Stronger opponent threat response
+		OpponentMinorPenalty: 450,     // Better minor threat response
+		FiveInRow:            1500000, // Maximum priority for wins
+		FourInRowOpen:        450000,  // Maximum priority for winning threats
+		FourInRowClosed:      45000,   // Better closed-four evaluation
 		ThreeInRowVariants: map[string]int{
-			"open":   30000, // Enhanced open three evaluation
-			"semi":   720,   // Better semi-open evaluation
-			"closed": 35000, // Enhanced closed three
-			"gap":    1100,  // Better gap pattern recognition
-			"basic":  850,   // Enhanced basic patterns
-			"corner": 200,   // Better corner evaluation
+			"open":   45000, // Much stronger open three evaluation
+			"semi":   1000,  // Better semi-open evaluation
+			"closed": 50000, // Much stronger closed three
+			"gap":    1500,  // Better gap pattern recognition
+			"basic":  1200,  // Enhanced basic patterns
+			"corner": 300,   // Better corner evaluation
 		},
 	}
 }
@@ -1523,18 +1523,23 @@ func (r *optimizedRobotPlayer) improvedIterativeDeepening() *pointAndValue {
 			bestResult = result
 		}
 
-		// Early termination only for very strong positions
-		if bestResult != nil && bestResult.value > 900000 {
+		// Early termination only for extremely strong positions (near-win)
+		if bestResult != nil && bestResult.value > 1200000 {
 			break
 		}
 
-		// More conservative early termination for good moves
-		if depth >= 4 && bestResult != nil && bestResult.value > 400000 {
+		// More conservative early termination - only for very strong tactical wins
+		if depth >= 6 && bestResult != nil && bestResult.value > 800000 {
 			break
 		}
 
-		// In complex positions, ensure we search deeper
-		if r.hasComplexThreats() && depth < 6 {
+		// In complex positions, ensure we search deeper before terminating
+		if r.hasComplexThreats() && depth < maxDepth {
+			continue
+		}
+
+		// For opening and middle game, search deeper to avoid tactical oversights
+		if r.count < 20 && depth < 6 {
 			continue
 		}
 	}
@@ -1548,26 +1553,26 @@ func (r *optimizedRobotPlayer) getImprovedAdaptiveDepth() int {
 
 	// Check for complex tactical positions that require deeper analysis
 	if r.hasComplexThreats() {
-		return baseDepth + 2 // Deeper search for complex tactical positions
+		return min(baseDepth+2, 8) // Deeper search for complex tactical positions, max 8
 	}
 
 	// Check for immediate threats that require deeper analysis
 	if r.hasImmediateThreats() {
-		return baseDepth + 2 // Deeper search for tactical positions
+		return min(baseDepth+2, 8) // Deeper search for tactical positions
 	}
 
-	// In opening, use standard depth for better positioning
-	if r.count < 10 {
+	// In opening, use full depth for better positioning
+	if r.count < 8 {
 		return baseDepth
 	}
 
 	// In middle game with many pieces, use deeper search for tactics
-	if r.count >= 10 && r.count < 25 {
-		return baseDepth + 2
+	if r.count >= 8 && r.count < 25 {
+		return min(baseDepth+2, 8) // Critical tactical phase
 	}
 
-	// In endgame, use deeper search
-	return baseDepth + 2
+	// In endgame, use full depth
+	return baseDepth
 }
 
 // hasComplexThreats checks for complex tactical threats requiring deeper analysis
@@ -1799,18 +1804,23 @@ func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*poin
 func (r *optimizedRobotPlayer) getImprovedCandidateLimit(totalCandidates, depth int) int {
 	baseLimit := r.maxCountEachLevel
 
-	// In tactical positions, consider more candidates
+	// In tactical positions, consider more candidates to avoid missing key moves
 	if r.hasComplexThreats() {
-		baseLimit += 4
+		baseLimit += 6
 	}
 
-	// Deeper searches can afford to check fewer candidates
-	if depth >= 4 {
-		baseLimit = baseLimit * 3 / 4
+	// For middle depths, use more candidates for better tactical analysis
+	if depth >= 3 && depth <= 5 {
+		baseLimit += 2
 	}
 
 	// Early game: check more positions for better opening play
-	if r.count < 8 {
+	if r.count < 10 {
+		baseLimit += 3
+	}
+
+	// Middle game: maintain high candidate count for tactical phases
+	if r.count >= 10 && r.count < 25 {
 		baseLimit += 2
 	}
 
@@ -1818,8 +1828,8 @@ func (r *optimizedRobotPlayer) getImprovedCandidateLimit(totalCandidates, depth 
 	if baseLimit > totalCandidates {
 		baseLimit = totalCandidates
 	}
-	if baseLimit < 8 {
-		baseLimit = 8
+	if baseLimit < 12 {
+		baseLimit = 12 // Higher minimum to avoid missing tactical moves
 	}
 
 	return baseLimit
