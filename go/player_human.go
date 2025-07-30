@@ -22,10 +22,8 @@ type humanPlayer struct {
 func (h *humanPlayer) Update() error {
 	if h.isTurn && inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
-		fmt.Printf("mouse: %d, %d\n", x, y)
 		x -= 17
 		y -= 17
-		fmt.Printf("mouse: %d, %d\n", x-x/35*35, y-y/35*35)
 		if x-x/35*35-18 < 10 && y-y/35*35-18 < 10 {
 			x /= 35
 			y /= 35
