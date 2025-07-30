@@ -44,7 +44,10 @@ func runGameWithGUI(optimized, balanced, enhanced bool) {
 			fmt.Println("使用平衡AI参数以获得更强棋力和合理速度")
 		} else if optimized {
 			robot = newOptimizedRobotPlayer(colorBlack)
-			fmt.Println("使用优化AI参数以获得更好性能")
+			fmt.Println("使用改进的优化AI参数以获得更好性能和战术能力")
+			fmt.Println("- 候选着法：16个（提升战术分析）")
+			fmt.Println("- 智能深度：复杂局面自动加深搜索")
+			fmt.Println("- 威胁检测：增强的多重威胁识别")
 		} else {
 			robot = newRobotPlayer(colorBlack)
 			fmt.Println("使用默认AI参数")
