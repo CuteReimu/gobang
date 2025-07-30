@@ -88,13 +88,16 @@ func newRobotPlayer(color playerColor) player {
 
 // newOptimizedRobotPlayer creates a robot player with optimized parameters
 func newOptimizedRobotPlayer(color playerColor) player {
-	rp := &robotPlayer{
-		boardCache:        make(boardCache),
-		pColor:            color,
-		maxLevelCount:     4,  // Even depth for better minimax performance
-		maxCountEachLevel: 12, // Reduced candidates for better performance
-		maxCheckmateCount: 10, // Reduced checkmate search
-		evalParams:        getOptimizedEvaluationParams(),
+	rp := &optimizedRobotPlayer{
+		robotPlayer: robotPlayer{
+			boardCache:        make(boardCache),
+			pColor:            color,
+			maxLevelCount:     4,  // Even depth for better minimax performance
+			maxCountEachLevel: 16, // Increased candidates for better tactics
+			maxCheckmateCount: 12, // Full checkmate search for tactical strength
+			evalParams:        getImprovedOptimizedEvaluationParams(),
+		},
+		evalCache: make(map[uint64]int),
 	}
 	rp.initBoardStatus()
 	return rp
@@ -131,11 +134,49 @@ func newEnhancedRobotPlayer(color playerColor) player {
 	return rp
 }
 
+// optimizedRobotPlayer - improved optimized AI with better balance of speed and strength
+type optimizedRobotPlayer struct {
+	robotPlayer
+	evalCache map[uint64]int // Cache for position evaluations
+	nodeCount int            // For debugging
+}
+
 // leanEnhancedRobotPlayer - simplified enhanced AI focused on real performance gains
 type leanEnhancedRobotPlayer struct {
 	robotPlayer
 	evalCache map[uint64]int // Cache for position evaluations
 	nodeCount int            // For debugging
+}
+
+// getImprovedOptimizedEvaluationParams returns improved optimized evaluation parameters with better tactical awareness
+func getImprovedOptimizedEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:             380000,  // Higher priority for winning moves
+		DeadFourA:            300000,  // Better threat detection
+		DeadFourB:            280000,  // Better threat detection
+		DeadFourC:            260000,  // Better threat detection
+		LiveThreeNear:        2200,    // Enhanced three-in-a-row evaluation
+		LiveThreeBonus:       7500,    // Better tactical evaluation
+		LiveThreeFar:         550,     // Better distant threat recognition
+		DeadThree:            850,     // Enhanced defensive evaluation
+		DeadThreeBonus:       7200,    // Better defensive bonus
+		TwoCount2:            3800,    // Better two-count evaluation
+		TwoCount1:            3200,    // Better single-two evaluation
+		ScatterMultiplier:    7,       // Enhanced position evaluation
+		OpponentPenalty:      580,     // Better opponent threat response
+		OpponentMinorPenalty: 320,     // Better minor threat response
+		FiveInRow:            1200000, // Maximum priority for wins
+		FourInRowOpen:        370000,  // Higher priority for winning threats
+		FourInRowClosed:      32000,   // Better closed-four evaluation
+		ThreeInRowVariants: map[string]int{
+			"open":   30000, // Enhanced open three evaluation
+			"semi":   720,   // Better semi-open evaluation
+			"closed": 35000, // Enhanced closed three
+			"gap":    1100,  // Better gap pattern recognition
+			"basic":  850,   // Enhanced basic patterns
+			"corner": 200,   // Better corner evaluation
+		},
+	}
 }
 
 // getOptimizedEvaluationParams returns optimized evaluation parameters
@@ -1427,6 +1468,378 @@ func (r *enhancedRobotPlayer) updateKillerMove(depth int, move point) {
 }
 
 // Lean Enhanced AI methods with focused optimizations for 6-layer depth
+
+// play method for optimized robot player - balanced speed and strength
+func (r *optimizedRobotPlayer) play() (point, error) {
+	r.nodeCount = 0 // Reset node count
+
+	if r.count == 0 {
+		p := point{maxLen / 2, maxLen / 2}
+		r.set(p, r.pColor)
+		return p, nil
+	}
+
+	// Quick win/defense checks
+	p1, ok := r.findForm5(r.pColor)
+	if ok {
+		r.set(p1, r.pColor)
+		return p1, nil
+	}
+	p1, ok = r.stop4(r.pColor)
+	if ok {
+		r.set(p1, r.pColor)
+		return p1, nil
+	}
+
+	// Full checkmate search for tactical strength
+	for i := 2; i <= r.maxCheckmateCount; i += 2 {
+		if p, ok := r.calculateKill(r.pColor, true, i); ok {
+			return p, nil
+		}
+	}
+
+	// Use improved iterative deepening
+	result := r.improvedIterativeDeepening()
+	if result == nil {
+		return point{}, errors.New("algorithm error")
+	}
+
+	r.set(result.p, r.pColor)
+	return result.p, nil
+}
+
+// improvedIterativeDeepening with better balance of speed and tactical strength
+func (r *optimizedRobotPlayer) improvedIterativeDeepening() *pointAndValue {
+	var bestResult *pointAndValue
+
+	// Adaptive depth with better tactical awareness
+	maxDepth := r.getImprovedAdaptiveDepth()
+
+	// Start with shallow search and progressively deepen
+	for depth := 2; depth <= maxDepth; depth += 2 {
+		result := r.optimizedMax(depth, -1000000000, 1000000000)
+
+		if result != nil {
+			bestResult = result
+		}
+
+		// Early termination only for very strong positions
+		if bestResult != nil && bestResult.value > 900000 {
+			break
+		}
+
+		// More conservative early termination for good moves
+		if depth >= 4 && bestResult != nil && bestResult.value > 400000 {
+			break
+		}
+
+		// In complex positions, ensure we search deeper
+		if r.hasComplexThreats() && depth < 6 {
+			continue
+		}
+	}
+
+	return bestResult
+}
+
+// getImprovedAdaptiveDepth returns adaptive search depth with better tactical awareness
+func (r *optimizedRobotPlayer) getImprovedAdaptiveDepth() int {
+	baseDepth := r.maxLevelCount
+
+	// Check for complex tactical positions that require deeper analysis
+	if r.hasComplexThreats() {
+		return baseDepth + 2 // Deeper search for complex tactical positions
+	}
+
+	// Check for immediate threats that require deeper analysis
+	if r.hasImmediateThreats() {
+		return baseDepth + 2 // Deeper search for tactical positions
+	}
+
+	// In opening, use standard depth for better positioning
+	if r.count < 10 {
+		return baseDepth
+	}
+
+	// In middle game with many pieces, use deeper search for tactics
+	if r.count >= 10 && r.count < 25 {
+		return baseDepth + 2
+	}
+
+	// In endgame, use deeper search 
+	return baseDepth + 2
+}
+
+// hasComplexThreats checks for complex tactical threats requiring deeper analysis
+func (r *optimizedRobotPlayer) hasComplexThreats() bool {
+	// Check for multiple live threes (potential double threats)
+	myThreats := r.countLiveThreats(r.pColor)
+	opponentThreats := r.countLiveThreats(r.pColor.conversion())
+	
+	// Complex position if either player has multiple live threes
+	if myThreats >= 2 || opponentThreats >= 2 {
+		return true
+	}
+	
+	// Check for mixed threats (combination of threes and fours)
+	if (myThreats >= 1 && r.exists4(r.pColor)) || 
+	   (opponentThreats >= 1 && r.exists4(r.pColor.conversion())) {
+		return true
+	}
+	
+	return false
+}
+
+// countLiveThreats counts live three-in-a-row threats for tactical analysis
+func (r *optimizedRobotPlayer) countLiveThreats(color playerColor) int {
+	threats := 0
+	p := point{}
+
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			if r.get(p) == colorEmpty {
+				// Check if placing a piece here creates a live three
+				r.set(p, color)
+
+				for _, dir := range fourDirections {
+					count := 1
+					blocked := 0
+					
+					// Count in positive direction
+					for k := 1; k < 4; k++ {
+						pk := p.move(dir, k)
+						if pk.checkRange() && r.get(pk) == color {
+							count++
+						} else if pk.checkRange() && r.get(pk) == color.conversion() {
+							blocked++
+							break
+						} else {
+							break
+						}
+					}
+					
+					// Count in negative direction
+					for k := 1; k < 4; k++ {
+						pk := p.move(dir, -k)
+						if pk.checkRange() && r.get(pk) == color {
+							count++
+						} else if pk.checkRange() && r.get(pk) == color.conversion() {
+							blocked++
+							break
+						} else {
+							break
+						}
+					}
+
+					// Live three: exactly 3 pieces and not blocked on both ends
+					if count == 3 && blocked == 0 {
+						threats++
+						break // Only count once per position
+					}
+				}
+
+				r.set(p, colorEmpty)
+			}
+		}
+	}
+
+	return threats
+}
+
+// optimizedMax method for optimized robot player with better pruning
+func (r *optimizedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAndValue {
+	r.nodeCount++
+	
+	// Check cache first
+	if cached := r.getCachedEvaluation(); cached != nil {
+		return cached
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor)
+	
+	// Adaptive candidate pruning based on depth and game phase
+	maxCandidates := r.getImprovedCandidateLimit(len(candidates), step)
+	if len(candidates) > maxCandidates {
+		candidates = candidates[:maxCandidates]
+	}
+
+	if step == 1 {
+		if len(candidates) == 0 {
+			return nil
+		}
+		p := candidates[0].p
+		r.set(p, r.pColor)
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		r.set(p, colorEmpty)
+		result := &pointAndValue{p, val}
+		r.cacheEvaluation(result)
+		return result
+	}
+
+	maxPoint := point{}
+	maxVal := alpha
+
+	for _, candidate := range candidates {
+		p := candidate.p
+		r.set(p, r.pColor)
+		
+		// Quick evaluation for immediate wins
+		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		if boardVal > 800000 {
+			r.set(p, colorEmpty)
+			result := &pointAndValue{p, boardVal}
+			r.cacheEvaluation(result)
+			return result
+		}
+		
+		minResult := r.optimizedMin(step-1, maxVal, beta)
+		evathis := minResult.value
+		
+		if evathis > maxVal {
+			maxVal = evathis
+			maxPoint = p
+		}
+		
+		r.set(p, colorEmpty)
+		
+		// Alpha-beta pruning
+		if maxVal >= beta {
+			break
+		}
+	}
+
+	result := &pointAndValue{maxPoint, maxVal}
+	r.cacheEvaluation(result)
+	return result
+}
+
+// optimizedMin method for optimized robot player
+func (r *optimizedRobotPlayer) optimizedMin(step int, alpha, beta int) *pointAndValue {
+	r.nodeCount++
+	
+	// Check cache first
+	if cached := r.getCachedEvaluation(); cached != nil {
+		return cached
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor.conversion())
+	
+	// Adaptive candidate pruning
+	maxCandidates := r.getImprovedCandidateLimit(len(candidates), step)
+	if len(candidates) > maxCandidates {
+		candidates = candidates[:maxCandidates]
+	}
+
+	if step == 1 {
+		if len(candidates) == 0 {
+			return nil
+		}
+		p := candidates[0].p
+		r.set(p, r.pColor.conversion())
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		r.set(p, colorEmpty)
+		result := &pointAndValue{p, val}
+		r.cacheEvaluation(result)
+		return result
+	}
+
+	minPoint := point{}
+	minVal := beta
+
+	for _, candidate := range candidates {
+		p := candidate.p
+		r.set(p, r.pColor.conversion())
+		
+		maxResult := r.optimizedMax(step-1, alpha, minVal)
+		evathis := maxResult.value
+		
+		if evathis < minVal {
+			minVal = evathis
+			minPoint = p
+		}
+		
+		r.set(p, colorEmpty)
+		
+		// Alpha-beta pruning
+		if minVal <= alpha {
+			break
+		}
+	}
+
+	result := &pointAndValue{minPoint, minVal}
+	r.cacheEvaluation(result)
+	return result
+}
+
+// getOptimizedCandidates gets candidate moves for optimized robot player
+func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*pointAndValue {
+	var candidates []*pointAndValue
+	p := point{}
+	
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				val := r.evaluatePoint(p, color)
+				candidates = append(candidates, &pointAndValue{p, val})
+			}
+		}
+	}
+	
+	// Sort candidates by value (best first)
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].value > candidates[j].value
+	})
+	
+	return candidates
+}
+
+// getImprovedCandidateLimit returns adaptive candidate limit with better tactical awareness
+func (r *optimizedRobotPlayer) getImprovedCandidateLimit(totalCandidates, depth int) int {
+	baseLimit := r.maxCountEachLevel
+	
+	// In tactical positions, consider more candidates
+	if r.hasComplexThreats() {
+		baseLimit += 4
+	}
+	
+	// Deeper searches can afford to check fewer candidates
+	if depth >= 4 {
+		baseLimit = baseLimit * 3 / 4
+	}
+	
+	// Early game: check more positions for better opening play
+	if r.count < 8 {
+		baseLimit += 2
+	}
+	
+	// Ensure we don't exceed total candidates or go below minimum
+	if baseLimit > totalCandidates {
+		baseLimit = totalCandidates
+	}
+	if baseLimit < 8 {
+		baseLimit = 8
+	}
+	
+	return baseLimit
+}
+
+// Simple caching methods for optimized robot player
+func (r *optimizedRobotPlayer) getCachedEvaluation() *pointAndValue {
+	if val, exists := r.evalCache[r.hash]; exists {
+		return &pointAndValue{point{}, val}
+	}
+	return nil
+}
+
+func (r *optimizedRobotPlayer) cacheEvaluation(result *pointAndValue) {
+	if len(r.evalCache) > 8000 {
+		// Clear cache when it gets too large
+		r.evalCache = make(map[uint64]int)
+	}
+	r.evalCache[r.hash] = result.value
+}
 
 // play method for lean enhanced robot player
 func (r *leanEnhancedRobotPlayer) play() (point, error) {
