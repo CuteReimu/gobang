@@ -44,12 +44,11 @@ func runGameWithGUI(optimized, balanced, enhanced bool) {
 			fmt.Println("使用平衡AI参数以获得更强棋力和合理速度")
 		} else if optimized {
 			robot = newOptimizedRobotPlayer(colorBlack)
-			fmt.Println("使用增强优化AI以获得强棋力和良好性能")
-			fmt.Println("- 搜索深度：6层（确保战术强度）")
-			fmt.Println("- 候选着法：18个（全面战术分析）")
-			fmt.Println("- 自适应深度：复杂局面自动加深至8层")
-			fmt.Println("- 强化评估：更准确的威胁识别和防御")
-			fmt.Println("- 平衡策略：保持速度的同时不牺牲棋力")
+			fmt.Println("使用增强优化AI（迭代加深搜索，时间管理）")
+			fmt.Println("- 迭代加深：先搜索4层，再尝试6层")
+			fmt.Println("- 时间管理：6层搜索超过60秒自动终止")
+			fmt.Println("- 增强评估：改进着法排序提升剪枝效率")
+			fmt.Println("- 战术平衡：保持速度的同时确保战术强度")
 		} else {
 			robot = newRobotPlayer(colorBlack)
 			fmt.Println("使用默认AI参数")

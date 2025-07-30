@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"time"
 )
 
 // EvaluationParams holds configurable evaluation parameters
@@ -92,8 +93,8 @@ func newOptimizedRobotPlayer(color playerColor) player {
 		robotPlayer: robotPlayer{
 			boardCache:        make(boardCache),
 			pColor:            color,
-			maxLevelCount:     6,  // Increased to 6 layers for better tactical strength
-			maxCountEachLevel: 18, // More candidates for better tactical analysis
+			maxLevelCount:     6,  // Maximum depth for iterative deepening
+			maxCountEachLevel: 16, // Balanced candidate count
 			maxCheckmateCount: 12, // Full checkmate search for tactical strength
 			evalParams:        getImprovedOptimizedEvaluationParams(),
 		},
@@ -745,8 +746,182 @@ func min(a, b int) int {
 	return b
 }
 
-func (r *robotPlayer) evaluatePoint(p point, color playerColor) int {
-	return r.evaluatePoint2(p, color, colorBlack) + r.evaluatePoint2(p, color, colorWhite)
+// Enhanced evaluatePoint for better move ordering and alpha-beta pruning efficiency
+func (r *optimizedRobotPlayer) evaluatePoint(p point, color playerColor) int {
+	// Start with base evaluation
+	baseValue := r.robotPlayer.evaluatePoint(p, color)
+	
+	// Add tactical bonuses for better move ordering
+	tacticalBonus := 0
+	
+	// Simulate placing the piece
+	r.set(p, color)
+	
+	// Check for immediate wins (highest priority)
+	if r.checkForm5ByPoint(p, color) {
+		tacticalBonus += 2000000
+	}
+	
+	// Check for creating live fours (very high priority)
+	if r.createsLiveFour(p, color) {
+		tacticalBonus += 500000
+	}
+	
+	// Check for blocking opponent's live fours (very high priority)
+	if r.createsLiveFour(p, color.conversion()) {
+		tacticalBonus += 450000
+	}
+	
+	// Check for creating multiple threats (high priority)
+	if r.createsMultipleThreats(p, color) {
+		tacticalBonus += 300000
+	}
+	
+	// Check for creating live threes (medium-high priority)
+	liveThrees := r.countLiveThreesAt(p, color)
+	tacticalBonus += liveThrees * 50000
+	
+	// Check for blocking opponent's live threes (medium priority)
+	opponentLiveThrees := r.countLiveThreesAt(p, color.conversion())
+	tacticalBonus += opponentLiveThrees * 30000
+	
+	// Bonus for center positions in early game
+	if r.count < 10 {
+		center := maxLen / 2
+		distance := abs(p.x-center) + abs(p.y-center)
+		tacticalBonus += (10 - distance) * 100
+	}
+	
+	// Remove the piece
+	r.set(p, colorEmpty)
+	
+	return baseValue + tacticalBonus
+}
+
+// Helper functions for tactical evaluation
+
+func (r *optimizedRobotPlayer) createsLiveFour(p point, color playerColor) bool {
+	// Check all four directions for live four patterns
+	for _, dir := range fourDirections {
+		count := 1 // The piece we're placing
+		
+		// Count pieces in positive direction
+		for i := 1; i < 5; i++ {
+			pos := p.move(dir, i)
+			if !pos.checkRange() || r.get(pos) != color {
+				break
+			}
+			count++
+		}
+		
+		// Count pieces in negative direction
+		for i := 1; i < 5; i++ {
+			pos := p.move(dir, -i)
+			if !pos.checkRange() || r.get(pos) != color {
+				break
+			}
+			count++
+		}
+		
+		// Check if it forms a live four (4 in a row with open ends)
+		if count >= 4 {
+			// Check if both ends are open
+			leftEnd := p.move(dir, -(count-1))
+			rightEnd := p.move(dir, count)
+			if leftEnd.checkRange() && rightEnd.checkRange() &&
+				r.get(leftEnd) == colorEmpty && r.get(rightEnd) == colorEmpty {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *optimizedRobotPlayer) createsMultipleThreats(p point, color playerColor) bool {
+	threatsCount := 0
+	
+	for _, dir := range fourDirections {
+		if r.createsThreatenPattern(p, color, dir) {
+			threatsCount++
+		}
+	}
+	
+	return threatsCount >= 2
+}
+
+func (r *optimizedRobotPlayer) createsThreatenPattern(p point, color playerColor, dir direction) bool {
+	count := 1 // The piece we're placing
+	
+	// Count consecutive pieces in both directions
+	for i := 1; i < 4; i++ {
+		pos := p.move(dir, i)
+		if !pos.checkRange() || r.get(pos) != color {
+			break
+		}
+		count++
+	}
+	
+	for i := 1; i < 4; i++ {
+		pos := p.move(dir, -i)
+		if !pos.checkRange() || r.get(pos) != color {
+			break
+		}
+		count++
+	}
+	
+	return count >= 3
+}
+
+func (r *optimizedRobotPlayer) countLiveThreesAt(p point, color playerColor) int {
+	liveThrees := 0
+	
+	for _, dir := range fourDirections {
+		if r.formsLiveThree(p, color, dir) {
+			liveThrees++
+		}
+	}
+	
+	return liveThrees
+}
+
+func (r *optimizedRobotPlayer) formsLiveThree(p point, color playerColor, dir direction) bool {
+	count := 1 // The piece we're placing
+	
+	// Simple live three check: exactly 3 pieces with open ends
+	for i := 1; i < 3; i++ {
+		pos := p.move(dir, i)
+		if !pos.checkRange() || r.get(pos) != color {
+			break
+		}
+		count++
+	}
+	
+	for i := 1; i < 3; i++ {
+		pos := p.move(dir, -i)
+		if !pos.checkRange() || r.get(pos) != color {
+			break
+		}
+		count++
+	}
+	
+	if count == 3 {
+		// Check if ends are open
+		leftEnd := p.move(dir, -2)
+		rightEnd := p.move(dir, 2)
+		if leftEnd.checkRange() && rightEnd.checkRange() &&
+			r.get(leftEnd) == colorEmpty && r.get(rightEnd) == colorEmpty {
+			return true
+		}
+	}
+	
+	return false
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor) (value int) {
@@ -1469,7 +1644,7 @@ func (r *enhancedRobotPlayer) updateKillerMove(depth int, move point) {
 
 // Lean Enhanced AI methods with focused optimizations for 6-layer depth
 
-// play method for optimized robot player - balanced speed and strength
+// play method for optimized robot player - iterative deepening with time management
 func (r *optimizedRobotPlayer) play() (point, error) {
 	r.nodeCount = 0 // Reset node count
 
@@ -1491,15 +1666,15 @@ func (r *optimizedRobotPlayer) play() (point, error) {
 		return p1, nil
 	}
 
-	// Full checkmate search for tactical strength
-	for i := 2; i <= r.maxCheckmateCount; i += 2 {
+	// Quick checkmate search (only up to 4 steps to maintain speed)
+	for i := 2; i <= 4; i += 2 {
 		if p, ok := r.calculateKill(r.pColor, true, i); ok {
 			return p, nil
 		}
 	}
 
-	// Use improved iterative deepening
-	result := r.improvedIterativeDeepening()
+	// Use time-controlled iterative deepening
+	result := r.timeControlledIterativeDeepening()
 	if result == nil {
 		return point{}, errors.New("algorithm error")
 	}
@@ -1508,12 +1683,68 @@ func (r *optimizedRobotPlayer) play() (point, error) {
 	return result.p, nil
 }
 
-// improvedIterativeDeepening with better balance of speed and tactical strength
-func (r *optimizedRobotPlayer) improvedIterativeDeepening() *pointAndValue {
+// timeControlledIterativeDeepening implements iterative deepening with time management
+// It starts with depth 4, then tries depth 6, but stops if depth 6 takes more than 60 seconds
+func (r *optimizedRobotPlayer) timeControlledIterativeDeepening() *pointAndValue {
 	var bestResult *pointAndValue
+	startTime := time.Now()
+	
+	fmt.Printf("开始AI思考... ")
+	
+	// Phase 1: Quick search at depth 4 (should be very fast)
+	fmt.Printf("深度4搜索... ")
+	depth4Start := time.Now()
+	result4 := r.optimizedIterativeDeepening(4)
+	depth4Duration := time.Since(depth4Start)
+	fmt.Printf("完成(%.3fs) ", depth4Duration.Seconds())
+	
+	if result4 != nil {
+		bestResult = result4
+		
+		// If we found a winning move at depth 4, return immediately
+		if result4.value > 800000 {
+			fmt.Printf("发现胜负手!\n")
+			return bestResult
+		}
+	}
+	
+	// Phase 2: Try deeper search at depth 6, but with 60-second timeout
+	fmt.Printf("深度6搜索... ")
+	depth6Start := time.Now()
+	
+	// Use channel for timeout control
+	resultChan := make(chan *pointAndValue, 1)
+	done := make(chan bool, 1)
+	
+	go func() {
+		result6 := r.optimizedIterativeDeepening(6)
+		resultChan <- result6
+		done <- true
+	}()
+	
+	// Wait for either completion or 60-second timeout
+	timeout := time.After(60 * time.Second)
+	select {
+	case result6 := <-resultChan:
+		depth6Duration := time.Since(depth6Start)
+		fmt.Printf("完成(%.3fs) ", depth6Duration.Seconds())
+		if result6 != nil && result6.value > bestResult.value {
+			bestResult = result6
+		}
+	case <-timeout:
+		fmt.Printf("超时(60s) ")
+		// Timeout reached, use depth 4 result
+	}
+	
+	totalDuration := time.Since(startTime)
+	fmt.Printf("总用时: %.3fs\n", totalDuration.Seconds())
+	
+	return bestResult
+}
 
-	// Adaptive depth with better tactical awareness
-	maxDepth := r.getImprovedAdaptiveDepth()
+// optimizedIterativeDeepening performs search up to the specified maximum depth
+func (r *optimizedRobotPlayer) optimizedIterativeDeepening(maxDepth int) *pointAndValue {
+	var bestResult *pointAndValue
 
 	// Start with shallow search and progressively deepen
 	for depth := 2; depth <= maxDepth; depth += 2 {
@@ -1523,24 +1754,14 @@ func (r *optimizedRobotPlayer) improvedIterativeDeepening() *pointAndValue {
 			bestResult = result
 		}
 
-		// Early termination only for extremely strong positions (near-win)
+		// Early termination for extremely strong positions (near-win)
 		if bestResult != nil && bestResult.value > 1200000 {
 			break
 		}
 
-		// More conservative early termination - only for very strong tactical wins
-		if depth >= 6 && bestResult != nil && bestResult.value > 800000 {
+		// Conservative early termination for very strong tactical wins
+		if depth >= 4 && bestResult != nil && bestResult.value > 900000 {
 			break
-		}
-
-		// In complex positions, ensure we search deeper before terminating
-		if r.hasComplexThreats() && depth < maxDepth {
-			continue
-		}
-
-		// For opening and middle game, search deeper to avoid tactical oversights
-		if r.count < 20 && depth < 6 {
-			continue
 		}
 	}
 
@@ -1777,7 +1998,7 @@ func (r *optimizedRobotPlayer) optimizedMin(step int, alpha, beta int) *pointAnd
 	return result
 }
 
-// getOptimizedCandidates gets candidate moves for optimized robot player
+// getOptimizedCandidates gets candidate moves for optimized robot player with enhanced evaluation
 func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*pointAndValue {
 	var candidates []*pointAndValue
 	p := point{}
@@ -1786,13 +2007,14 @@ func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*poin
 		for j := 0; j < maxLen; j++ {
 			p.x, p.y = j, i
 			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				// Use enhanced evaluation for better move ordering
 				val := r.evaluatePoint(p, color)
 				candidates = append(candidates, &pointAndValue{p, val})
 			}
 		}
 	}
 
-	// Sort candidates by value (best first)
+	// Sort candidates by value (best first) for better alpha-beta pruning
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].value > candidates[j].value
 	})
