@@ -1566,7 +1566,7 @@ func (r *optimizedRobotPlayer) getImprovedAdaptiveDepth() int {
 		return baseDepth + 2
 	}
 
-	// In endgame, use deeper search 
+	// In endgame, use deeper search
 	return baseDepth + 2
 }
 
@@ -1575,18 +1575,18 @@ func (r *optimizedRobotPlayer) hasComplexThreats() bool {
 	// Check for multiple live threes (potential double threats)
 	myThreats := r.countLiveThreats(r.pColor)
 	opponentThreats := r.countLiveThreats(r.pColor.conversion())
-	
+
 	// Complex position if either player has multiple live threes
 	if myThreats >= 2 || opponentThreats >= 2 {
 		return true
 	}
-	
+
 	// Check for mixed threats (combination of threes and fours)
-	if (myThreats >= 1 && r.exists4(r.pColor)) || 
-	   (opponentThreats >= 1 && r.exists4(r.pColor.conversion())) {
+	if (myThreats >= 1 && r.exists4(r.pColor)) ||
+		(opponentThreats >= 1 && r.exists4(r.pColor.conversion())) {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -1605,7 +1605,7 @@ func (r *optimizedRobotPlayer) countLiveThreats(color playerColor) int {
 				for _, dir := range fourDirections {
 					count := 1
 					blocked := 0
-					
+
 					// Count in positive direction
 					for k := 1; k < 4; k++ {
 						pk := p.move(dir, k)
@@ -1618,7 +1618,7 @@ func (r *optimizedRobotPlayer) countLiveThreats(color playerColor) int {
 							break
 						}
 					}
-					
+
 					// Count in negative direction
 					for k := 1; k < 4; k++ {
 						pk := p.move(dir, -k)
@@ -1650,14 +1650,14 @@ func (r *optimizedRobotPlayer) countLiveThreats(color playerColor) int {
 // optimizedMax method for optimized robot player with better pruning
 func (r *optimizedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAndValue {
 	r.nodeCount++
-	
+
 	// Check cache first
 	if cached := r.getCachedEvaluation(); cached != nil {
 		return cached
 	}
 
 	candidates := r.getOptimizedCandidates(r.pColor)
-	
+
 	// Adaptive candidate pruning based on depth and game phase
 	maxCandidates := r.getImprovedCandidateLimit(len(candidates), step)
 	if len(candidates) > maxCandidates {
@@ -1683,7 +1683,7 @@ func (r *optimizedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAnd
 	for _, candidate := range candidates {
 		p := candidate.p
 		r.set(p, r.pColor)
-		
+
 		// Quick evaluation for immediate wins
 		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
 		if boardVal > 800000 {
@@ -1692,17 +1692,17 @@ func (r *optimizedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAnd
 			r.cacheEvaluation(result)
 			return result
 		}
-		
+
 		minResult := r.optimizedMin(step-1, maxVal, beta)
 		evathis := minResult.value
-		
+
 		if evathis > maxVal {
 			maxVal = evathis
 			maxPoint = p
 		}
-		
+
 		r.set(p, colorEmpty)
-		
+
 		// Alpha-beta pruning
 		if maxVal >= beta {
 			break
@@ -1717,14 +1717,14 @@ func (r *optimizedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAnd
 // optimizedMin method for optimized robot player
 func (r *optimizedRobotPlayer) optimizedMin(step int, alpha, beta int) *pointAndValue {
 	r.nodeCount++
-	
+
 	// Check cache first
 	if cached := r.getCachedEvaluation(); cached != nil {
 		return cached
 	}
 
 	candidates := r.getOptimizedCandidates(r.pColor.conversion())
-	
+
 	// Adaptive candidate pruning
 	maxCandidates := r.getImprovedCandidateLimit(len(candidates), step)
 	if len(candidates) > maxCandidates {
@@ -1750,17 +1750,17 @@ func (r *optimizedRobotPlayer) optimizedMin(step int, alpha, beta int) *pointAnd
 	for _, candidate := range candidates {
 		p := candidate.p
 		r.set(p, r.pColor.conversion())
-		
+
 		maxResult := r.optimizedMax(step-1, alpha, minVal)
 		evathis := maxResult.value
-		
+
 		if evathis < minVal {
 			minVal = evathis
 			minPoint = p
 		}
-		
+
 		r.set(p, colorEmpty)
-		
+
 		// Alpha-beta pruning
 		if minVal <= alpha {
 			break
@@ -1776,7 +1776,7 @@ func (r *optimizedRobotPlayer) optimizedMin(step int, alpha, beta int) *pointAnd
 func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*pointAndValue {
 	var candidates []*pointAndValue
 	p := point{}
-	
+
 	for i := 0; i < maxLen; i++ {
 		for j := 0; j < maxLen; j++ {
 			p.x, p.y = j, i
@@ -1786,34 +1786,34 @@ func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*poin
 			}
 		}
 	}
-	
+
 	// Sort candidates by value (best first)
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].value > candidates[j].value
 	})
-	
+
 	return candidates
 }
 
 // getImprovedCandidateLimit returns adaptive candidate limit with better tactical awareness
 func (r *optimizedRobotPlayer) getImprovedCandidateLimit(totalCandidates, depth int) int {
 	baseLimit := r.maxCountEachLevel
-	
+
 	// In tactical positions, consider more candidates
 	if r.hasComplexThreats() {
 		baseLimit += 4
 	}
-	
+
 	// Deeper searches can afford to check fewer candidates
 	if depth >= 4 {
 		baseLimit = baseLimit * 3 / 4
 	}
-	
+
 	// Early game: check more positions for better opening play
 	if r.count < 8 {
 		baseLimit += 2
 	}
-	
+
 	// Ensure we don't exceed total candidates or go below minimum
 	if baseLimit > totalCandidates {
 		baseLimit = totalCandidates
@@ -1821,15 +1821,15 @@ func (r *optimizedRobotPlayer) getImprovedCandidateLimit(totalCandidates, depth 
 	if baseLimit < 8 {
 		baseLimit = 8
 	}
-	
+
 	return baseLimit
 }
 
 // Simple caching methods for optimized robot player
 func (r *optimizedRobotPlayer) getCachedEvaluation() *pointAndValue {
-	if val, exists := r.evalCache[r.hash]; exists {
-		return &pointAndValue{point{}, val}
-	}
+	// Disable broken cache that returns wrong point coordinates
+	// The cache only stores evaluation values but not the actual best move points
+	// This was causing the AI to always return (0,0)
 	return nil
 }
 
