@@ -686,19 +686,19 @@ func min(a, b int) int {
 // Enhanced evaluatePoint for better move ordering and alpha-beta pruning efficiency
 func (r *optimizedRobotPlayer) evaluatePoint(p point, color playerColor) int {
 	// More sophisticated evaluation for better move ordering and alpha-beta pruning
-	
+
 	// Simulate placing the piece
 	r.set(p, color)
-	
+
 	// Tactical evaluation
 	tacticalValue := 0
-	
+
 	// Check for immediate wins (highest priority)
 	if r.checkForm5ByPoint(p, color) {
 		r.set(p, colorEmpty)
 		return 10000000
 	}
-	
+
 	// Check for blocking opponent wins (highest defensive priority)
 	r.set(p, color.conversion())
 	if r.checkForm5ByPoint(p, color.conversion()) {
@@ -706,71 +706,71 @@ func (r *optimizedRobotPlayer) evaluatePoint(p point, color playerColor) int {
 		return 9000000
 	}
 	r.set(p, color)
-	
+
 	// Check for creating live fours (very high priority)
 	if r.createsLiveFour(p, color) {
 		tacticalValue += 1000000
 	}
-	
+
 	// Check for blocking opponent's live fours (very high defensive priority)
 	r.set(p, color.conversion())
 	if r.createsLiveFour(p, color.conversion()) {
 		tacticalValue += 900000
 	}
 	r.set(p, color)
-	
+
 	// Check for creating multiple threats (high priority)
 	if r.createsMultipleThreats(p, color) {
 		tacticalValue += 500000
 	}
-	
+
 	// Count live threes created
 	liveThrees := r.countLiveThreesAt(p, color)
 	tacticalValue += liveThrees * 100000
-	
+
 	// Count opponent live threes blocked
 	r.set(p, color.conversion())
 	opponentLiveThrees := r.countLiveThreesAt(p, color.conversion())
 	tacticalValue += opponentLiveThrees * 80000
 	r.set(p, color)
-	
+
 	// Check for creating open threes (medium priority)
 	openThrees := r.countOpenThreesAt(p, color)
 	tacticalValue += openThrees * 50000
-	
+
 	// Check for blocking opponent open threes
 	r.set(p, color.conversion())
 	opponentOpenThrees := r.countOpenThreesAt(p, color.conversion())
 	tacticalValue += opponentOpenThrees * 40000
 	r.set(p, color)
-	
+
 	// Check for creating twos
 	twos := r.countTwosAt(p, color)
 	tacticalValue += twos * 1000
-	
+
 	// Position evaluation (center is better in early game)
 	if r.count < 10 {
 		center := maxLen / 2
 		distance := abs(p.x-center) + abs(p.y-center)
 		tacticalValue += (10 - distance) * 100
 	}
-	
+
 	// Remove the piece and return evaluation
 	r.set(p, colorEmpty)
-	
+
 	return tacticalValue
 }
 
 // countOpenThreesAt counts open three patterns at a specific point
 func (r *optimizedRobotPlayer) countOpenThreesAt(p point, color playerColor) int {
 	count := 0
-	
+
 	for _, dir := range fourDirections {
 		// Check for open three pattern: 0111*0 (where * is the current position)
 		leftEmpty := true
 		rightEmpty := true
 		consecutiveCount := 1 // The piece we're placing
-		
+
 		// Count pieces to the left
 		leftCount := 0
 		for i := 1; i <= 3; i++ {
@@ -789,7 +789,7 @@ func (r *optimizedRobotPlayer) countOpenThreesAt(p point, color playerColor) int
 				break
 			}
 		}
-		
+
 		// Count pieces to the right
 		rightCount := 0
 		for i := 1; i <= 3; i++ {
@@ -808,23 +808,23 @@ func (r *optimizedRobotPlayer) countOpenThreesAt(p point, color playerColor) int
 				break
 			}
 		}
-		
+
 		// Check if we have an open three (3 consecutive pieces with empty spaces on both sides)
 		if consecutiveCount == 3 && leftEmpty && rightEmpty {
 			count++
 		}
 	}
-	
+
 	return count
 }
 
 // countTwosAt counts two-in-a-row patterns at a specific point
 func (r *optimizedRobotPlayer) countTwosAt(p point, color playerColor) int {
 	count := 0
-	
+
 	for _, dir := range fourDirections {
 		consecutiveCount := 1 // The piece we're placing
-		
+
 		// Count pieces in one direction
 		for i := 1; i <= 2; i++ {
 			pos := p.move(dir, i)
@@ -834,7 +834,7 @@ func (r *optimizedRobotPlayer) countTwosAt(p point, color playerColor) int {
 				break
 			}
 		}
-		
+
 		// Count pieces in the opposite direction
 		for i := 1; i <= 2; i++ {
 			pos := p.move(dir, -i)
@@ -844,12 +844,12 @@ func (r *optimizedRobotPlayer) countTwosAt(p point, color playerColor) int {
 				break
 			}
 		}
-		
+
 		if consecutiveCount == 2 {
 			count++
 		}
 	}
-	
+
 	return count
 }
 
@@ -1373,36 +1373,36 @@ func (r *optimizedRobotPlayer) play() (point, error) {
 // Iterative deepening search with time management as suggested by user
 func (r *optimizedRobotPlayer) iterativeDeepeningSearch() *pointAndValue {
 	fmt.Print("开始AI思考... ")
-	
+
 	// First search at depth 4 (should be fast)
 	fmt.Print("深度4搜索... ")
 	startTime := time.Now()
 	result4 := r.optimizedMax(4, -1000000000, 1000000000)
 	depth4Time := time.Since(startTime)
 	fmt.Printf("完成(%.3fs) ", depth4Time.Seconds())
-	
+
 	if result4 == nil {
 		fmt.Println("总用时: 无结果")
 		return nil
 	}
-	
+
 	// If depth 4 found a winning move, return immediately
 	if result4.value > 1000000 {
 		fmt.Printf("发现胜负手! 总用时: %.3fs\n", depth4Time.Seconds())
 		return result4
 	}
-	
+
 	// Try depth 6 with 60 second timeout
 	fmt.Print("深度6搜索... ")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	
+
 	result6Chan := make(chan *pointAndValue, 1)
 	go func() {
 		result6 := r.optimizedMaxWithContext(ctx, 6, -1000000000, 1000000000)
 		result6Chan <- result6
 	}()
-	
+
 	select {
 	case result6 := <-result6Chan:
 		totalTime := time.Since(startTime)
@@ -1428,7 +1428,7 @@ func (r *optimizedRobotPlayer) optimizedMaxWithContext(ctx context.Context, step
 		return nil
 	default:
 	}
-	
+
 	r.nodeCount++
 
 	if step == 0 {
@@ -1455,25 +1455,25 @@ func (r *optimizedRobotPlayer) optimizedMaxWithContext(ctx context.Context, step
 			return nil
 		default:
 		}
-		
+
 		r.set(candidate.p, r.pColor)
 		if r.checkForm5ByPoint(candidate.p, r.pColor) {
 			r.set(candidate.p, colorEmpty)
 			return &pointAndValue{candidate.p, 1000000000}
 		}
-		
+
 		val := r.optimizedMinWithContext(ctx, step-1, alpha, beta)
 		r.set(candidate.p, colorEmpty)
-		
+
 		if val == nil {
 			return nil // Cancelled
 		}
-		
+
 		if val.value > maxVal {
 			maxVal = val.value
 			maxPoint = candidate.p
 		}
-		
+
 		if maxVal > alpha {
 			alpha = maxVal
 		}
@@ -1494,7 +1494,7 @@ func (r *optimizedRobotPlayer) optimizedMinWithContext(ctx context.Context, step
 		return nil
 	default:
 	}
-	
+
 	r.nodeCount++
 
 	if step == 0 {
@@ -1517,25 +1517,25 @@ func (r *optimizedRobotPlayer) optimizedMinWithContext(ctx context.Context, step
 			return nil
 		default:
 		}
-		
+
 		r.set(candidate.p, r.pColor.conversion())
 		if r.checkForm5ByPoint(candidate.p, r.pColor.conversion()) {
 			r.set(candidate.p, colorEmpty)
 			return &pointAndValue{candidate.p, -1000000000}
 		}
-		
+
 		val := r.optimizedMaxWithContext(ctx, step-1, alpha, beta)
 		r.set(candidate.p, colorEmpty)
-		
+
 		if val == nil {
 			return nil // Cancelled
 		}
-		
+
 		if val.value < minVal {
 			minVal = val.value
 			minPoint = candidate.p
 		}
-		
+
 		if minVal < beta {
 			beta = minVal
 		}
@@ -1671,8 +1671,6 @@ func (r *optimizedRobotPlayer) exists4Single(p point, color playerColor) bool {
 	}
 	return false
 }
-
-
 
 // optimizedMax method for optimized robot player with better pruning
 func (r *optimizedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAndValue {
