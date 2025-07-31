@@ -1783,12 +1783,25 @@ func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*poin
 	var candidates []*pointAndValue
 	p := point{}
 
+	// Check if we have urgent defensive needs
+	hasUrgentThreats := r.hasUrgentDefensiveNeeds()
+
 	for i := 0; i < maxLen; i++ {
 		for j := 0; j < maxLen; j++ {
 			p.x, p.y = j, i
 			if r.get(p) == colorEmpty && r.isNeighbor(p) {
 				// Use enhanced evaluation for better move ordering
 				val := r.evaluatePoint(p, color)
+				
+				// CRITICAL FIX: If we have urgent defensive needs, heavily boost defensive moves
+				if hasUrgentThreats {
+					defensiveBonus := r.getDefensiveBonus(p, color)
+					if defensiveBonus > 0 {
+						// Boost defensive moves to ensure they're prioritized over attacking moves
+						val += defensiveBonus + 1000000 // Ensure defensive moves rank higher
+					}
+				}
+				
 				candidates = append(candidates, &pointAndValue{p, val})
 			}
 		}
@@ -1800,6 +1813,99 @@ func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*poin
 	})
 
 	return candidates
+}
+
+// getDefensiveBonus calculates additional bonus for defensive moves when urgent threats exist
+func (r *optimizedRobotPlayer) getDefensiveBonus(p point, color playerColor) int {
+	opponentColor := color.conversion()
+	bonus := 0
+	
+	// Simulate placing our piece
+	r.set(p, color)
+	
+	// Check if this move blocks opponent's immediate win
+	r.set(p, opponentColor)
+	blocksWin := r.checkForm5ByPoint(p, opponentColor)
+	r.set(p, color) // Back to our piece
+	
+	if blocksWin {
+		bonus += 800000 // Critical: blocks immediate win
+	}
+	
+	// Check if this move blocks opponent's live four creation
+	r.set(p, opponentColor)
+	blocksFour := r.createsLiveFour(p, opponentColor)
+	r.set(p, color) // Back to our piece
+	
+	if blocksFour {
+		bonus += 600000 // Very high: blocks live four
+	}
+	
+	// Most importantly: Check if this move directly reduces opponent's threat count
+	// This catches moves that block potential threats the opponent could create
+	
+	// Count opponent threats without our piece
+	r.set(p, colorEmpty)
+	threatsWithoutUs := r.countLiveThreats(opponentColor)
+	
+	// Count opponent threats with our piece placed
+	r.set(p, color)
+	threatsWithUs := r.countLiveThreats(opponentColor)
+	
+	threatsBlocked := threatsWithoutUs - threatsWithUs
+	bonus += threatsBlocked * 200000 // High bonus for each threat blocked
+	
+	// Also check if we block any immediate four-creation opportunities for opponent
+	fourPositions := r.getAllLiveFourPositions(opponentColor)
+	for _, pos := range fourPositions {
+		if pos.x == p.x && pos.y == p.y {
+			bonus += 500000 // Block opponent's live four opportunity
+			break
+		}
+	}
+	
+	// Remove our piece
+	r.set(p, colorEmpty)
+	
+	return bonus
+}
+
+// getAllLiveFourPositions finds all positions where opponent could create a live four
+func (r *optimizedRobotPlayer) getAllLiveFourPositions(color playerColor) []point {
+	var positions []point
+	
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p := point{j, i}
+			if r.get(p) == colorEmpty {
+				r.set(p, color)
+				if r.createsLiveFour(p, color) {
+					positions = append(positions, p)
+				}
+				r.set(p, colorEmpty)
+			}
+		}
+	}
+	
+	return positions
+}
+
+// countLiveThreatsBlocked counts how many opponent live threats this move would block
+func (r *optimizedRobotPlayer) countLiveThreatsBlocked(p point, opponentColor playerColor) int {
+	// Count threats before placing our piece
+	threatsBefore := r.countLiveThreats(opponentColor)
+	
+	// Place our piece
+	r.set(p, r.pColor)
+	
+	// Count threats after placing our piece
+	threatsAfter := r.countLiveThreats(opponentColor)
+	
+	// Remove our piece
+	r.set(p, colorEmpty)
+	
+	// Return how many threats we blocked
+	return threatsBefore - threatsAfter
 }
 
 // getImprovedCandidateLimit returns adaptive candidate limit with better tactical awareness
