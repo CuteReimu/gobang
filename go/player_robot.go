@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"sort"
+	"time"
 )
 
 // EvaluationParams holds configurable evaluation parameters
@@ -683,54 +685,172 @@ func min(a, b int) int {
 
 // Enhanced evaluatePoint for better move ordering and alpha-beta pruning efficiency
 func (r *optimizedRobotPlayer) evaluatePoint(p point, color playerColor) int {
-	// Start with base evaluation
-	baseValue := r.robotPlayer.evaluatePoint2(p, color, color)
-
-	// Add tactical bonuses for better move ordering
-	tacticalBonus := 0
-
+	// More sophisticated evaluation for better move ordering and alpha-beta pruning
+	
 	// Simulate placing the piece
 	r.set(p, color)
-
+	
+	// Tactical evaluation
+	tacticalValue := 0
+	
 	// Check for immediate wins (highest priority)
 	if r.checkForm5ByPoint(p, color) {
-		tacticalBonus += 2000000
+		r.set(p, colorEmpty)
+		return 10000000
 	}
-
+	
+	// Check for blocking opponent wins (highest defensive priority)
+	r.set(p, color.conversion())
+	if r.checkForm5ByPoint(p, color.conversion()) {
+		r.set(p, colorEmpty)
+		return 9000000
+	}
+	r.set(p, color)
+	
 	// Check for creating live fours (very high priority)
 	if r.createsLiveFour(p, color) {
-		tacticalBonus += 500000
+		tacticalValue += 1000000
 	}
-
-	// Check for blocking opponent's live fours (very high priority)
+	
+	// Check for blocking opponent's live fours (very high defensive priority)
+	r.set(p, color.conversion())
 	if r.createsLiveFour(p, color.conversion()) {
-		tacticalBonus += 450000
+		tacticalValue += 900000
 	}
-
+	r.set(p, color)
+	
 	// Check for creating multiple threats (high priority)
 	if r.createsMultipleThreats(p, color) {
-		tacticalBonus += 300000
+		tacticalValue += 500000
 	}
-
-	// Check for creating live threes (medium-high priority)
+	
+	// Count live threes created
 	liveThrees := r.countLiveThreesAt(p, color)
-	tacticalBonus += liveThrees * 50000
-
-	// Check for blocking opponent's live threes (high defensive priority)
+	tacticalValue += liveThrees * 100000
+	
+	// Count opponent live threes blocked
+	r.set(p, color.conversion())
 	opponentLiveThrees := r.countLiveThreesAt(p, color.conversion())
-	tacticalBonus += opponentLiveThrees * 40000 // Increased from 30000 for better defense
-
-	// Bonus for center positions in early game
+	tacticalValue += opponentLiveThrees * 80000
+	r.set(p, color)
+	
+	// Check for creating open threes (medium priority)
+	openThrees := r.countOpenThreesAt(p, color)
+	tacticalValue += openThrees * 50000
+	
+	// Check for blocking opponent open threes
+	r.set(p, color.conversion())
+	opponentOpenThrees := r.countOpenThreesAt(p, color.conversion())
+	tacticalValue += opponentOpenThrees * 40000
+	r.set(p, color)
+	
+	// Check for creating twos
+	twos := r.countTwosAt(p, color)
+	tacticalValue += twos * 1000
+	
+	// Position evaluation (center is better in early game)
 	if r.count < 10 {
 		center := maxLen / 2
 		distance := abs(p.x-center) + abs(p.y-center)
-		tacticalBonus += (10 - distance) * 100
+		tacticalValue += (10 - distance) * 100
 	}
-
-	// Remove the piece
+	
+	// Remove the piece and return evaluation
 	r.set(p, colorEmpty)
+	
+	return tacticalValue
+}
 
-	return baseValue + tacticalBonus
+// countOpenThreesAt counts open three patterns at a specific point
+func (r *optimizedRobotPlayer) countOpenThreesAt(p point, color playerColor) int {
+	count := 0
+	
+	for _, dir := range fourDirections {
+		// Check for open three pattern: 0111*0 (where * is the current position)
+		leftEmpty := true
+		rightEmpty := true
+		consecutiveCount := 1 // The piece we're placing
+		
+		// Count pieces to the left
+		leftCount := 0
+		for i := 1; i <= 3; i++ {
+			pos := p.move(dir, -i)
+			if !pos.checkRange() {
+				leftEmpty = false
+				break
+			}
+			if r.get(pos) == color {
+				leftCount++
+				consecutiveCount++
+			} else if r.get(pos) == colorEmpty {
+				break
+			} else {
+				leftEmpty = false
+				break
+			}
+		}
+		
+		// Count pieces to the right
+		rightCount := 0
+		for i := 1; i <= 3; i++ {
+			pos := p.move(dir, i)
+			if !pos.checkRange() {
+				rightEmpty = false
+				break
+			}
+			if r.get(pos) == color {
+				rightCount++
+				consecutiveCount++
+			} else if r.get(pos) == colorEmpty {
+				break
+			} else {
+				rightEmpty = false
+				break
+			}
+		}
+		
+		// Check if we have an open three (3 consecutive pieces with empty spaces on both sides)
+		if consecutiveCount == 3 && leftEmpty && rightEmpty {
+			count++
+		}
+	}
+	
+	return count
+}
+
+// countTwosAt counts two-in-a-row patterns at a specific point
+func (r *optimizedRobotPlayer) countTwosAt(p point, color playerColor) int {
+	count := 0
+	
+	for _, dir := range fourDirections {
+		consecutiveCount := 1 // The piece we're placing
+		
+		// Count pieces in one direction
+		for i := 1; i <= 2; i++ {
+			pos := p.move(dir, i)
+			if pos.checkRange() && r.get(pos) == color {
+				consecutiveCount++
+			} else {
+				break
+			}
+		}
+		
+		// Count pieces in the opposite direction
+		for i := 1; i <= 2; i++ {
+			pos := p.move(dir, -i)
+			if pos.checkRange() && r.get(pos) == color {
+				consecutiveCount++
+			} else {
+				break
+			}
+		}
+		
+		if consecutiveCount == 2 {
+			count++
+		}
+	}
+	
+	return count
 }
 
 // Helper functions for tactical evaluation
@@ -1229,43 +1349,226 @@ func (r *optimizedRobotPlayer) play() (point, error) {
 		}
 	}
 
-	// Use fast optimized search
-	result := r.fastOptimizedSearch()
+	// Use iterative deepening search with time management
+	result := r.iterativeDeepeningSearch()
 	if result == nil {
 		return point{}, errors.New("algorithm error")
+	}
+
+	// Validate the move before making it
+	if r.get(result.p) != colorEmpty {
+		// Fallback to simple candidate selection if result is invalid
+		candidates := r.getValidCandidates(r.pColor)
+		if len(candidates) > 0 {
+			result = candidates[0]
+		} else {
+			return point{}, errors.New("no valid moves available")
+		}
 	}
 
 	r.set(result.p, r.pColor)
 	return result.p, nil
 }
 
-// Fast single-depth search with enhanced defensive logic
-func (r *optimizedRobotPlayer) fastOptimizedSearch() *pointAndValue {
-	// Quick defensive check - if opponent has immediate threats, focus on defense
-	if r.hasImmediateThreats() {
-		// Use simpler, faster search focused on defense
-		return r.fastDefensiveSearch()
-	}
-
-	// Normal search at depth 4 for speed
-	return r.optimizedMax(4, -1000000000, 1000000000)
-}
-
-// fastDefensiveSearch focuses on immediate threats with minimal computation
-func (r *optimizedRobotPlayer) fastDefensiveSearch() *pointAndValue {
-	// Get candidates with simple evaluation
-	candidates := r.getSimpleCandidates(r.pColor)
-
-	if len(candidates) == 0 {
+// Iterative deepening search with time management as suggested by user
+func (r *optimizedRobotPlayer) iterativeDeepeningSearch() *pointAndValue {
+	fmt.Print("开始AI思考... ")
+	
+	// First search at depth 4 (should be fast)
+	fmt.Print("深度4搜索... ")
+	startTime := time.Now()
+	result4 := r.optimizedMax(4, -1000000000, 1000000000)
+	depth4Time := time.Since(startTime)
+	fmt.Printf("完成(%.3fs) ", depth4Time.Seconds())
+	
+	if result4 == nil {
+		fmt.Println("总用时: 无结果")
 		return nil
 	}
+	
+	// If depth 4 found a winning move, return immediately
+	if result4.value > 1000000 {
+		fmt.Printf("发现胜负手! 总用时: %.3fs\n", depth4Time.Seconds())
+		return result4
+	}
+	
+	// Try depth 6 with 60 second timeout
+	fmt.Print("深度6搜索... ")
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	
+	result6Chan := make(chan *pointAndValue, 1)
+	go func() {
+		result6 := r.optimizedMaxWithContext(ctx, 6, -1000000000, 1000000000)
+		result6Chan <- result6
+	}()
+	
+	select {
+	case result6 := <-result6Chan:
+		totalTime := time.Since(startTime)
+		if result6 != nil {
+			fmt.Printf("完成(%.3fs) 总用时: %.3fs\n", totalTime.Seconds()-depth4Time.Seconds(), totalTime.Seconds())
+			return result6
+		} else {
+			fmt.Printf("无效结果，使用4层结果 总用时: %.3fs\n", totalTime.Seconds())
+			return result4
+		}
+	case <-ctx.Done():
+		totalTime := time.Since(startTime)
+		fmt.Printf("超时，使用4层结果 总用时: %.3fs\n", totalTime.Seconds())
+		return result4
+	}
+}
 
-	bestPoint := candidates[0].p
-	bestValue := candidates[0].value
+// Context-aware search that can be cancelled
+func (r *optimizedRobotPlayer) optimizedMaxWithContext(ctx context.Context, step int, alpha int, beta int) *pointAndValue {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+	
+	r.nodeCount++
 
-	// For defensive situations, just use the best candidate from simple evaluation
-	// This avoids the expensive multi-layer search
-	return &pointAndValue{bestPoint, bestValue}
+	if step == 0 {
+		return &pointAndValue{point{}, r.evaluateBoard(r.pColor)}
+	}
+
+	if v := r.getCachedEvaluation(); v != nil {
+		return v
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor)
+	limit := r.getSimpleCandidateLimit()
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+
+	maxVal := -1000000000
+	maxPoint := point{}
+
+	for _, candidate := range candidates {
+		// Check for cancellation in the loop
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		
+		r.set(candidate.p, r.pColor)
+		if r.checkForm5ByPoint(candidate.p, r.pColor) {
+			r.set(candidate.p, colorEmpty)
+			return &pointAndValue{candidate.p, 1000000000}
+		}
+		
+		val := r.optimizedMinWithContext(ctx, step-1, alpha, beta)
+		r.set(candidate.p, colorEmpty)
+		
+		if val == nil {
+			return nil // Cancelled
+		}
+		
+		if val.value > maxVal {
+			maxVal = val.value
+			maxPoint = candidate.p
+		}
+		
+		if maxVal > alpha {
+			alpha = maxVal
+		}
+		if beta <= alpha {
+			break
+		}
+	}
+
+	result := &pointAndValue{maxPoint, maxVal}
+	r.cacheEvaluation(result)
+	return result
+}
+
+func (r *optimizedRobotPlayer) optimizedMinWithContext(ctx context.Context, step int, alpha int, beta int) *pointAndValue {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+	
+	r.nodeCount++
+
+	if step == 0 {
+		return &pointAndValue{point{}, r.evaluateBoard(r.pColor)}
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor.conversion())
+	limit := r.getSimpleCandidateLimit()
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+
+	minVal := 1000000000
+	minPoint := point{}
+
+	for _, candidate := range candidates {
+		// Check for cancellation in the loop
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		
+		r.set(candidate.p, r.pColor.conversion())
+		if r.checkForm5ByPoint(candidate.p, r.pColor.conversion()) {
+			r.set(candidate.p, colorEmpty)
+			return &pointAndValue{candidate.p, -1000000000}
+		}
+		
+		val := r.optimizedMaxWithContext(ctx, step-1, alpha, beta)
+		r.set(candidate.p, colorEmpty)
+		
+		if val == nil {
+			return nil // Cancelled
+		}
+		
+		if val.value < minVal {
+			minVal = val.value
+			minPoint = candidate.p
+		}
+		
+		if minVal < beta {
+			beta = minVal
+		}
+		if beta <= alpha {
+			break
+		}
+	}
+
+	return &pointAndValue{minPoint, minVal}
+}
+
+// getValidCandidates ensures we only return valid, empty positions
+func (r *optimizedRobotPlayer) getValidCandidates(color playerColor) []*pointAndValue {
+	var candidates []*pointAndValue
+	p := point{}
+
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			// Only consider empty positions that have neighbors
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				val := r.evaluatePoint(p, color)
+				candidates = append(candidates, &pointAndValue{p, val})
+			}
+		}
+	}
+
+	// Sort candidates by value (best first) for better alpha-beta pruning
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].value > candidates[j].value
+	})
+
+	return candidates
 }
 
 // getSimpleCandidates gets candidates with fast, simple evaluation focused on defense
@@ -1520,10 +1823,18 @@ func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*poin
 	return candidates
 }
 
-// getSimpleCandidateLimit returns a simple candidate limit for better performance
+// getSimpleCandidateLimit returns a reasonable candidate limit for good performance vs strength balance
 func (r *optimizedRobotPlayer) getSimpleCandidateLimit() int {
-	// Simple fixed limit for fast performance
-	return 16
+	// Use more candidates for better play quality
+	// Early game: more candidates for exploration
+	// Late game: fewer candidates for speed
+	if r.count < 10 {
+		return 20
+	} else if r.count < 20 {
+		return 16
+	} else {
+		return 12
+	}
 }
 
 // Simple caching methods for optimized robot player
