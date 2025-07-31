@@ -751,51 +751,51 @@ func min(a, b int) int {
 func (r *optimizedRobotPlayer) evaluatePoint(p point, color playerColor) int {
 	// Start with base evaluation
 	baseValue := r.robotPlayer.evaluatePoint(p, color)
-	
+
 	// Add tactical bonuses for better move ordering
 	tacticalBonus := 0
-	
+
 	// Simulate placing the piece
 	r.set(p, color)
-	
+
 	// Check for immediate wins (highest priority)
 	if r.checkForm5ByPoint(p, color) {
 		tacticalBonus += 2000000
 	}
-	
+
 	// Check for creating live fours (very high priority)
 	if r.createsLiveFour(p, color) {
 		tacticalBonus += 500000
 	}
-	
+
 	// Check for blocking opponent's live fours (very high priority)
 	if r.createsLiveFour(p, color.conversion()) {
 		tacticalBonus += 450000
 	}
-	
+
 	// Check for creating multiple threats (high priority)
 	if r.createsMultipleThreats(p, color) {
 		tacticalBonus += 300000
 	}
-	
+
 	// Check for creating live threes (medium-high priority)
 	liveThrees := r.countLiveThreesAt(p, color)
 	tacticalBonus += liveThrees * 50000
-	
+
 	// Check for blocking opponent's live threes (medium priority)
 	opponentLiveThrees := r.countLiveThreesAt(p, color.conversion())
 	tacticalBonus += opponentLiveThrees * 30000
-	
+
 	// Bonus for center positions in early game
 	if r.count < 10 {
 		center := maxLen / 2
 		distance := abs(p.x-center) + abs(p.y-center)
 		tacticalBonus += (10 - distance) * 100
 	}
-	
+
 	// Remove the piece
 	r.set(p, colorEmpty)
-	
+
 	return baseValue + tacticalBonus
 }
 
@@ -805,7 +805,7 @@ func (r *optimizedRobotPlayer) createsLiveFour(p point, color playerColor) bool 
 	// Check all four directions for live four patterns
 	for _, dir := range fourDirections {
 		count := 1 // The piece we're placing
-		
+
 		// Count pieces in positive direction
 		for i := 1; i < 5; i++ {
 			pos := p.move(dir, i)
@@ -814,7 +814,7 @@ func (r *optimizedRobotPlayer) createsLiveFour(p point, color playerColor) bool 
 			}
 			count++
 		}
-		
+
 		// Count pieces in negative direction
 		for i := 1; i < 5; i++ {
 			pos := p.move(dir, -i)
@@ -823,11 +823,11 @@ func (r *optimizedRobotPlayer) createsLiveFour(p point, color playerColor) bool 
 			}
 			count++
 		}
-		
+
 		// Check if it forms a live four (4 in a row with open ends)
 		if count >= 4 {
 			// Check if both ends are open
-			leftEnd := p.move(dir, -(count-1))
+			leftEnd := p.move(dir, -(count - 1))
 			rightEnd := p.move(dir, count)
 			if leftEnd.checkRange() && rightEnd.checkRange() &&
 				r.get(leftEnd) == colorEmpty && r.get(rightEnd) == colorEmpty {
@@ -840,19 +840,19 @@ func (r *optimizedRobotPlayer) createsLiveFour(p point, color playerColor) bool 
 
 func (r *optimizedRobotPlayer) createsMultipleThreats(p point, color playerColor) bool {
 	threatsCount := 0
-	
+
 	for _, dir := range fourDirections {
 		if r.createsThreatenPattern(p, color, dir) {
 			threatsCount++
 		}
 	}
-	
+
 	return threatsCount >= 2
 }
 
 func (r *optimizedRobotPlayer) createsThreatenPattern(p point, color playerColor, dir direction) bool {
 	count := 1 // The piece we're placing
-	
+
 	// Count consecutive pieces in both directions
 	for i := 1; i < 4; i++ {
 		pos := p.move(dir, i)
@@ -861,7 +861,7 @@ func (r *optimizedRobotPlayer) createsThreatenPattern(p point, color playerColor
 		}
 		count++
 	}
-	
+
 	for i := 1; i < 4; i++ {
 		pos := p.move(dir, -i)
 		if !pos.checkRange() || r.get(pos) != color {
@@ -869,25 +869,25 @@ func (r *optimizedRobotPlayer) createsThreatenPattern(p point, color playerColor
 		}
 		count++
 	}
-	
+
 	return count >= 3
 }
 
 func (r *optimizedRobotPlayer) countLiveThreesAt(p point, color playerColor) int {
 	liveThrees := 0
-	
+
 	for _, dir := range fourDirections {
 		if r.formsLiveThree(p, color, dir) {
 			liveThrees++
 		}
 	}
-	
+
 	return liveThrees
 }
 
 func (r *optimizedRobotPlayer) formsLiveThree(p point, color playerColor, dir direction) bool {
 	count := 1 // The piece we're placing
-	
+
 	// Simple live three check: exactly 3 pieces with open ends
 	for i := 1; i < 3; i++ {
 		pos := p.move(dir, i)
@@ -896,7 +896,7 @@ func (r *optimizedRobotPlayer) formsLiveThree(p point, color playerColor, dir di
 		}
 		count++
 	}
-	
+
 	for i := 1; i < 3; i++ {
 		pos := p.move(dir, -i)
 		if !pos.checkRange() || r.get(pos) != color {
@@ -904,7 +904,7 @@ func (r *optimizedRobotPlayer) formsLiveThree(p point, color playerColor, dir di
 		}
 		count++
 	}
-	
+
 	if count == 3 {
 		// Check if ends are open
 		leftEnd := p.move(dir, -2)
@@ -914,7 +914,7 @@ func (r *optimizedRobotPlayer) formsLiveThree(p point, color playerColor, dir di
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -1689,41 +1689,41 @@ func (r *optimizedRobotPlayer) play() (point, error) {
 func (r *optimizedRobotPlayer) timeControlledIterativeDeepening() *pointAndValue {
 	var bestResult *pointAndValue
 	startTime := time.Now()
-	
+
 	fmt.Printf("开始AI思考... ")
-	
+
 	// Phase 1: Quick search at depth 4 (should be very fast)
 	fmt.Printf("深度4搜索... ")
 	depth4Start := time.Now()
 	result4 := r.optimizedIterativeDeepening(4)
 	depth4Duration := time.Since(depth4Start)
 	fmt.Printf("完成(%.3fs) ", depth4Duration.Seconds())
-	
+
 	if result4 != nil {
 		bestResult = result4
-		
+
 		// If we found a winning move at depth 4, return immediately
 		if result4.value > 800000 {
 			fmt.Printf("发现胜负手!\n")
 			return bestResult
 		}
 	}
-	
+
 	// Phase 2: Try deeper search at depth 6, but with 60-second timeout
 	fmt.Printf("深度6搜索... ")
 	depth6Start := time.Now()
-	
+
 	// Use context for proper cancellation
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	
+
 	resultChan := make(chan *pointAndValue, 1)
-	
+
 	go func() {
 		result6 := r.optimizedIterativeDeepeningWithContext(ctx, 6)
 		resultChan <- result6
 	}()
-	
+
 	// Wait for either completion or timeout
 	select {
 	case result6 := <-resultChan:
@@ -1736,10 +1736,10 @@ func (r *optimizedRobotPlayer) timeControlledIterativeDeepening() *pointAndValue
 		fmt.Printf("超时(60s) ")
 		// Context cancelled, goroutine should stop gracefully
 	}
-	
+
 	totalDuration := time.Since(startTime)
 	fmt.Printf("总用时: %.3fs\n", totalDuration.Seconds())
-	
+
 	return bestResult
 }
 
@@ -1953,9 +1953,8 @@ func (r *optimizedRobotPlayer) optimizedMaxWithContext(ctx context.Context, step
 		// Check if context was cancelled during search
 		select {
 		case <-ctx.Done():
-			result := &pointAndValue{maxPoint, maxVal}
-			r.cacheEvaluation(result)
-			return result
+			// Timeout occurred, discard partial 6-layer result and use 4-layer result
+			return nil
 		default:
 			// Continue
 		}
@@ -2042,9 +2041,8 @@ func (r *optimizedRobotPlayer) optimizedMinWithContext(ctx context.Context, step
 		// Check if context was cancelled during search
 		select {
 		case <-ctx.Done():
-			result := &pointAndValue{minPoint, minVal}
-			r.cacheEvaluation(result)
-			return result
+			// Timeout occurred, discard partial 6-layer result and use 4-layer result
+			return nil
 		default:
 			// Continue
 		}
