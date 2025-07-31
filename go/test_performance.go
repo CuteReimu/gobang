@@ -17,7 +17,6 @@ func testPerformance() {
 		{"原始AI", newRobotPlayer(colorBlack)},
 		{"优化AI", newOptimizedRobotPlayer(colorBlack)},
 		{"平衡AI", newBalancedRobotPlayer(colorBlack)},
-		{"增强AI", newEnhancedRobotPlayer(colorBlack)},
 	}
 
 	// Test positions
@@ -59,11 +58,7 @@ func setupOpeningPosition(ai player) {
 		v.set(point{center, center}, colorBlack)
 		v.set(point{center + 1, center}, colorWhite)
 		v.set(point{center, center + 1}, colorBlack)
-	case *leanEnhancedRobotPlayer:
-		v.set(point{center, center}, colorBlack)
-		v.set(point{center + 1, center}, colorWhite)
-		v.set(point{center, center + 1}, colorBlack)
-	case *enhancedRobotPlayer:
+	case *optimizedRobotPlayer:
 		v.set(point{center, center}, colorBlack)
 		v.set(point{center + 1, center}, colorWhite)
 		v.set(point{center, center + 1}, colorBlack)
@@ -86,17 +81,7 @@ func setupMidGamePositionTest(ai player) {
 		v.set(point{center - 1, center}, colorWhite)
 		v.set(point{center + 1, center - 1}, colorWhite)
 		v.set(point{center - 2, center}, colorWhite)
-	case *leanEnhancedRobotPlayer:
-		v.set(point{center, center}, colorBlack)
-		v.set(point{center + 1, center}, colorBlack)
-		v.set(point{center - 1, center + 1}, colorBlack)
-		v.set(point{center + 2, center - 1}, colorBlack)
-		v.set(point{center, center + 1}, colorWhite)
-		v.set(point{center + 1, center + 1}, colorWhite)
-		v.set(point{center - 1, center}, colorWhite)
-		v.set(point{center + 1, center - 1}, colorWhite)
-		v.set(point{center - 2, center}, colorWhite)
-	case *enhancedRobotPlayer:
+	case *optimizedRobotPlayer:
 		v.set(point{center, center}, colorBlack)
 		v.set(point{center + 1, center}, colorBlack)
 		v.set(point{center - 1, center + 1}, colorBlack)
@@ -121,13 +106,7 @@ func setupEndGamePosition(ai player) {
 					} else {
 						v.set(point{i, j}, colorWhite)
 					}
-				case *leanEnhancedRobotPlayer:
-					if (i+j)%2 == 0 {
-						v.set(point{i, j}, colorBlack)
-					} else {
-						v.set(point{i, j}, colorWhite)
-					}
-				case *enhancedRobotPlayer:
+				case *optimizedRobotPlayer:
 					if (i+j)%2 == 0 {
 						v.set(point{i, j}, colorBlack)
 					} else {

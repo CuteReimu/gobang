@@ -198,73 +198,6 @@ func checkWin(board [][]playerColor, lastMove point) bool {
 	return false
 }
 
-// Enhanced AI benchmark functionality
-func runEnhancedAIBenchmark() {
-	fmt.Println("运行增强AI性能基准测试...")
-	runEnhancedAIComparison()
-}
-
-// Enhanced AI vs Original AI Performance Comparison
-func runEnhancedAIComparison() {
-	fmt.Println("\n=== Enhanced AI vs Original AI Performance Comparison ===")
-
-	// Test scenarios
-	scenarios := []struct {
-		name      string
-		moveCount int
-	}{
-		{"Early Game", 4},
-		{"Mid Game", 12},
-		{"Late Game", 20},
-	}
-
-	for _, scenario := range scenarios {
-		fmt.Printf("\n--- %s (%d moves) ---\n", scenario.name, scenario.moveCount)
-
-		// Test Original AI
-		original := newRobotPlayer(colorBlack)
-		setupTestBoard(original, scenario.moveCount)
-
-		start := time.Now()
-		_, err := original.play()
-		originalTime := time.Since(start)
-
-		if err != nil {
-			fmt.Printf("Original AI error: %v\n", err)
-			continue
-		}
-
-		// Test Enhanced AI
-		enhanced := newEnhancedRobotPlayer(colorBlack)
-		setupTestBoard(enhanced, scenario.moveCount)
-
-		start = time.Now()
-		_, err = enhanced.play()
-		enhancedTime := time.Since(start)
-
-		if err != nil {
-			fmt.Printf("Enhanced AI error: %v\n", err)
-			continue
-		}
-
-		speedup := float64(originalTime) / float64(enhancedTime)
-		fmt.Printf("Original AI (6层):  %v\n", originalTime)
-		fmt.Printf("Enhanced AI (6层):  %v\n", enhancedTime)
-
-		// Safely access nodeCount if it's a leanEnhancedRobotPlayer
-		if leanEnhanced, ok := enhanced.(*leanEnhancedRobotPlayer); ok {
-			fmt.Printf("Enhanced AI nodes: %d\n", leanEnhanced.nodeCount)
-		} else {
-			fmt.Printf("Enhanced AI nodes: N/A\n")
-		}
-		if speedup >= 1.0 {
-			fmt.Printf("性能提升: %.1fx 更快\n", speedup)
-		} else {
-			fmt.Printf("性能: %.1fx 原始AI速度\n", 1.0/speedup)
-		}
-	}
-}
-
 // setupTestBoard creates a test board scenario
 func setupTestBoard(ai player, moveCount int) {
 	// Get the underlying robot player interface
@@ -272,9 +205,7 @@ func setupTestBoard(ai player, moveCount int) {
 	switch v := ai.(type) {
 	case *robotPlayer:
 		rp = v
-	case *enhancedRobotPlayer:
-		rp = &v.robotPlayer
-	case *leanEnhancedRobotPlayer:
+	case *optimizedRobotPlayer:
 		rp = &v.robotPlayer
 	default:
 		return
