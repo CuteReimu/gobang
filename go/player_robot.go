@@ -718,9 +718,9 @@ func (r *optimizedRobotPlayer) evaluatePoint(p point, color playerColor) int {
 	liveThrees := r.countLiveThreesAt(p, color)
 	tacticalBonus += liveThrees * 50000
 
-	// Check for blocking opponent's live threes (medium priority)
+	// Check for blocking opponent's live threes (high defensive priority)
 	opponentLiveThrees := r.countLiveThreesAt(p, color.conversion())
-	tacticalBonus += opponentLiveThrees * 30000
+	tacticalBonus += opponentLiveThrees * 40000 // Increased from 30000 for better defense
 
 	// Bonus for center positions in early game
 	if r.count < 10 {
@@ -1201,6 +1201,7 @@ func (s pointAndValueSlice) Less(i, j int) bool {
 func (s pointAndValueSlice) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
+
 // play method for optimized robot player - iterative deepening with time management
 func (r *optimizedRobotPlayer) play() (point, error) {
 	r.nodeCount = 0 // Reset node count
@@ -1258,9 +1259,9 @@ func (r *optimizedRobotPlayer) timeControlledIterativeDeepening() *pointAndValue
 	if result4 != nil {
 		bestResult = result4
 
-		// If we found a winning move at depth 4, return immediately
-		if result4.value > 800000 {
-			fmt.Printf("发现胜负手!\n")
+		// Only terminate early for truly decisive moves, and only if opponent has no serious threats
+		if result4.value > 1200000 && !r.hasUrgentDefensiveNeeds() {
+			fmt.Printf("发现决定性胜负手!\n")
 			return bestResult
 		}
 	}
@@ -1311,13 +1312,13 @@ func (r *optimizedRobotPlayer) optimizedIterativeDeepening(maxDepth int) *pointA
 			bestResult = result
 		}
 
-		// Early termination for extremely strong positions (near-win)
-		if bestResult != nil && bestResult.value > 1200000 {
+		// Early termination for extremely strong positions (near-win), but only if no urgent defense needed
+		if bestResult != nil && bestResult.value > 1200000 && !r.hasUrgentDefensiveNeeds() {
 			break
 		}
 
-		// Conservative early termination for very strong tactical wins
-		if depth >= 4 && bestResult != nil && bestResult.value > 900000 {
+		// Conservative early termination for very strong tactical wins, but ensure no defensive needs
+		if depth >= 4 && bestResult != nil && bestResult.value > 900000 && !r.hasUrgentDefensiveNeeds() {
 			break
 		}
 	}
@@ -1345,13 +1346,13 @@ func (r *optimizedRobotPlayer) optimizedIterativeDeepeningWithContext(ctx contex
 			bestResult = result
 		}
 
-		// Early termination for extremely strong positions (near-win)
-		if bestResult != nil && bestResult.value > 1200000 {
+		// Early termination for extremely strong positions (near-win), but only if no urgent defense needed
+		if bestResult != nil && bestResult.value > 1200000 && !r.hasUrgentDefensiveNeeds() {
 			break
 		}
 
-		// Conservative early termination for very strong tactical wins
-		if depth >= 4 && bestResult != nil && bestResult.value > 900000 {
+		// Conservative early termination for very strong tactical wins, but ensure no defensive needs
+		if depth >= 4 && bestResult != nil && bestResult.value > 900000 && !r.hasUrgentDefensiveNeeds() {
 			break
 		}
 	}
@@ -1401,6 +1402,27 @@ func (r *optimizedRobotPlayer) hasComplexThreats() bool {
 	// Check for mixed threats (combination of threes and fours)
 	if (myThreats >= 1 && r.exists4(r.pColor)) ||
 		(opponentThreats >= 1 && r.exists4(r.pColor.conversion())) {
+		return true
+	}
+
+	return false
+}
+
+// hasUrgentDefensiveNeeds checks if the opponent has threats that require immediate attention
+func (r *optimizedRobotPlayer) hasUrgentDefensiveNeeds() bool {
+	// Check if opponent has a four-in-a-row that needs blocking
+	if r.exists4(r.pColor.conversion()) {
+		return true
+	}
+
+	// Check if opponent has multiple live threes (double threat)
+	opponentThreats := r.countLiveThreats(r.pColor.conversion())
+	if opponentThreats >= 2 {
+		return true
+	}
+
+	// Check if opponent has any live four possibilities
+	if _, hasLiveFour := r.stop4(r.pColor); hasLiveFour {
 		return true
 	}
 
@@ -1830,4 +1852,3 @@ func (r *optimizedRobotPlayer) cacheEvaluation(result *pointAndValue) {
 	}
 	r.evalCache[r.hash] = result.value
 }
-
