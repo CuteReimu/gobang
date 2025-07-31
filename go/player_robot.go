@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -1712,28 +1713,28 @@ func (r *optimizedRobotPlayer) timeControlledIterativeDeepening() *pointAndValue
 	fmt.Printf("深度6搜索... ")
 	depth6Start := time.Now()
 	
-	// Use channel for timeout control
+	// Use context for proper cancellation
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	
 	resultChan := make(chan *pointAndValue, 1)
-	done := make(chan bool, 1)
 	
 	go func() {
-		result6 := r.optimizedIterativeDeepening(6)
+		result6 := r.optimizedIterativeDeepeningWithContext(ctx, 6)
 		resultChan <- result6
-		done <- true
 	}()
 	
-	// Wait for either completion or 60-second timeout
-	timeout := time.After(60 * time.Second)
+	// Wait for either completion or timeout
 	select {
 	case result6 := <-resultChan:
 		depth6Duration := time.Since(depth6Start)
 		fmt.Printf("完成(%.3fs) ", depth6Duration.Seconds())
-		if result6 != nil && result6.value > bestResult.value {
+		if result6 != nil {
 			bestResult = result6
 		}
-	case <-timeout:
+	case <-ctx.Done():
 		fmt.Printf("超时(60s) ")
-		// Timeout reached, use depth 4 result
+		// Context cancelled, goroutine should stop gracefully
 	}
 	
 	totalDuration := time.Since(startTime)
@@ -1749,6 +1750,40 @@ func (r *optimizedRobotPlayer) optimizedIterativeDeepening(maxDepth int) *pointA
 	// Start with shallow search and progressively deepen
 	for depth := 2; depth <= maxDepth; depth += 2 {
 		result := r.optimizedMax(depth, -1000000000, 1000000000)
+
+		if result != nil {
+			bestResult = result
+		}
+
+		// Early termination for extremely strong positions (near-win)
+		if bestResult != nil && bestResult.value > 1200000 {
+			break
+		}
+
+		// Conservative early termination for very strong tactical wins
+		if depth >= 4 && bestResult != nil && bestResult.value > 900000 {
+			break
+		}
+	}
+
+	return bestResult
+}
+
+// optimizedIterativeDeepeningWithContext performs search up to the specified maximum depth with context cancellation
+func (r *optimizedRobotPlayer) optimizedIterativeDeepeningWithContext(ctx context.Context, maxDepth int) *pointAndValue {
+	var bestResult *pointAndValue
+
+	// Start with shallow search and progressively deepen
+	for depth := 2; depth <= maxDepth; depth += 2 {
+		// Check if context was cancelled
+		select {
+		case <-ctx.Done():
+			return bestResult // Return best result found so far
+		default:
+			// Continue
+		}
+
+		result := r.optimizedMaxWithContext(ctx, depth, -1000000000, 1000000000)
 
 		if result != nil {
 			bestResult = result
@@ -1871,6 +1906,175 @@ func (r *optimizedRobotPlayer) countLiveThreats(color playerColor) int {
 	}
 
 	return threats
+}
+
+// optimizedMaxWithContext method for optimized robot player with context cancellation
+func (r *optimizedRobotPlayer) optimizedMaxWithContext(ctx context.Context, step int, alpha, beta int) *pointAndValue {
+	// Check if context was cancelled
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+		// Continue
+	}
+
+	r.nodeCount++
+
+	// Check cache first
+	if cached := r.getCachedEvaluation(); cached != nil {
+		return cached
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor)
+
+	// Adaptive candidate pruning based on depth and game phase
+	maxCandidates := r.getImprovedCandidateLimit(len(candidates), step)
+	if len(candidates) > maxCandidates {
+		candidates = candidates[:maxCandidates]
+	}
+
+	if step == 1 {
+		if len(candidates) == 0 {
+			return nil
+		}
+		p := candidates[0].p
+		r.set(p, r.pColor)
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		r.set(p, colorEmpty)
+		result := &pointAndValue{p, val}
+		r.cacheEvaluation(result)
+		return result
+	}
+
+	maxPoint := point{}
+	maxVal := alpha
+
+	for _, candidate := range candidates {
+		// Check if context was cancelled during search
+		select {
+		case <-ctx.Done():
+			result := &pointAndValue{maxPoint, maxVal}
+			r.cacheEvaluation(result)
+			return result
+		default:
+			// Continue
+		}
+
+		p := candidate.p
+		r.set(p, r.pColor)
+
+		// Quick evaluation for immediate wins
+		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		if boardVal > 800000 {
+			r.set(p, colorEmpty)
+			result := &pointAndValue{p, boardVal}
+			r.cacheEvaluation(result)
+			return result
+		}
+
+		minResult := r.optimizedMinWithContext(ctx, step-1, maxVal, beta)
+		if minResult == nil {
+			r.set(p, colorEmpty)
+			continue
+		}
+		evathis := minResult.value
+
+		if evathis > maxVal {
+			maxVal = evathis
+			maxPoint = p
+		}
+
+		r.set(p, colorEmpty)
+
+		// Alpha-beta pruning
+		if maxVal >= beta {
+			break
+		}
+	}
+
+	result := &pointAndValue{maxPoint, maxVal}
+	r.cacheEvaluation(result)
+	return result
+}
+
+// optimizedMinWithContext method for optimized robot player with context cancellation
+func (r *optimizedRobotPlayer) optimizedMinWithContext(ctx context.Context, step int, alpha, beta int) *pointAndValue {
+	// Check if context was cancelled
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+		// Continue
+	}
+
+	r.nodeCount++
+
+	// Check cache first
+	if cached := r.getCachedEvaluation(); cached != nil {
+		return cached
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor.conversion())
+
+	// Adaptive candidate pruning
+	maxCandidates := r.getImprovedCandidateLimit(len(candidates), step)
+	if len(candidates) > maxCandidates {
+		candidates = candidates[:maxCandidates]
+	}
+
+	if step == 1 {
+		if len(candidates) == 0 {
+			return nil
+		}
+		p := candidates[0].p
+		r.set(p, r.pColor.conversion())
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		r.set(p, colorEmpty)
+		result := &pointAndValue{p, val}
+		r.cacheEvaluation(result)
+		return result
+	}
+
+	minPoint := point{}
+	minVal := beta
+
+	for _, candidate := range candidates {
+		// Check if context was cancelled during search
+		select {
+		case <-ctx.Done():
+			result := &pointAndValue{minPoint, minVal}
+			r.cacheEvaluation(result)
+			return result
+		default:
+			// Continue
+		}
+
+		p := candidate.p
+		r.set(p, r.pColor.conversion())
+
+		maxResult := r.optimizedMaxWithContext(ctx, step-1, alpha, minVal)
+		if maxResult == nil {
+			r.set(p, colorEmpty)
+			continue
+		}
+		evathis := maxResult.value
+
+		if evathis < minVal {
+			minVal = evathis
+			minPoint = p
+		}
+
+		r.set(p, colorEmpty)
+
+		// Alpha-beta pruning
+		if minVal <= alpha {
+			break
+		}
+	}
+
+	result := &pointAndValue{minPoint, minVal}
+	r.cacheEvaluation(result)
+	return result
 }
 
 // optimizedMax method for optimized robot player with better pruning
