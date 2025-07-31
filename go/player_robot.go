@@ -705,11 +705,22 @@ func (r *optimizedRobotPlayer) evaluatePoint(p point, color playerColor) int {
 		r.set(p, colorEmpty)
 		return 9000000
 	}
+	
+	// Check for blocking opponent's 4-in-a-row (critical defensive priority)
+	if r.exists4Single(p, color.conversion()) {
+		r.set(p, colorEmpty)
+		return 8500000 // Very high priority for blocking 4-in-a-row
+	}
 	r.set(p, color)
 
 	// Check for creating live fours (very high priority)
 	if r.createsLiveFour(p, color) {
 		tacticalValue += 1000000
+	}
+	
+	// Check for creating our own 4-in-a-row (very high priority)
+	if r.exists4Single(p, color) {
+		tacticalValue += 900000
 	}
 
 	// Check for blocking opponent's live fours (very high defensive priority)
@@ -1350,7 +1361,7 @@ func (r *optimizedRobotPlayer) play() (point, error) {
 	}
 
 	// Use iterative deepening search with time management
-	result := r.iterativeDeepeningSearch()
+	result := r.iterativeDeepeningSearchWithDefensiveCheck()
 	if result == nil {
 		return point{}, errors.New("algorithm error")
 	}
@@ -1370,9 +1381,16 @@ func (r *optimizedRobotPlayer) play() (point, error) {
 	return result.p, nil
 }
 
-// Iterative deepening search with time management as suggested by user
-func (r *optimizedRobotPlayer) iterativeDeepeningSearch() *pointAndValue {
+// Iterative deepening search with time management and defensive priority check
+func (r *optimizedRobotPlayer) iterativeDeepeningSearchWithDefensiveCheck() *pointAndValue {
 	fmt.Print("开始AI思考... ")
+
+	// First, check for critical defensive moves that must be played immediately
+	criticalDefense := r.findCriticalDefensiveMove()
+	if criticalDefense != nil {
+		fmt.Printf("发现紧急防御需求! %s 总用时: 0.001s\n", criticalDefense.p)
+		return criticalDefense
+	}
 
 	// First search at depth 4 (should be fast)
 	fmt.Print("深度4搜索... ")
@@ -1408,6 +1426,16 @@ func (r *optimizedRobotPlayer) iterativeDeepeningSearch() *pointAndValue {
 		totalTime := time.Since(startTime)
 		if result6 != nil {
 			fmt.Printf("完成(%.3fs) 总用时: %.3fs\n", totalTime.Seconds()-depth4Time.Seconds(), totalTime.Seconds())
+			
+			// Final defensive check: if depth 6 result ignores critical threats, override it
+			if r.shouldOverrideWithDefense(result6) {
+				defense := r.findCriticalDefensiveMove()
+				if defense != nil {
+					fmt.Printf("覆盖深度搜索结果，选择关键防御: %s\n", defense.p)
+					return defense
+				}
+			}
+			
 			return result6
 		} else {
 			fmt.Printf("无效结果，使用4层结果 总用时: %.3fs\n", totalTime.Seconds())
@@ -1849,4 +1877,53 @@ func (r *optimizedRobotPlayer) cacheEvaluation(result *pointAndValue) {
 		r.evalCache = make(map[uint64]int)
 	}
 	r.evalCache[r.hash] = result.value
+}
+
+// findCriticalDefensiveMove identifies moves that must be played to prevent immediate loss
+func (r *optimizedRobotPlayer) findCriticalDefensiveMove() *pointAndValue {
+	opponentColor := r.pColor.conversion()
+	
+	// Check all empty positions for critical defensive needs
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p := point{j, i}
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				// Check if opponent would win by playing here
+				r.set(p, opponentColor)
+				wouldWin := r.checkForm5ByPoint(p, opponentColor)
+				r.set(p, colorEmpty)
+				
+				if wouldWin {
+					return &pointAndValue{p, 9000000}
+				}
+				
+				// Check if opponent would create 4-in-a-row (immediate threat)
+				r.set(p, opponentColor)
+				would4 := r.exists4Single(p, opponentColor)
+				r.set(p, colorEmpty)
+				
+				if would4 {
+					return &pointAndValue{p, 8500000}
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// shouldOverrideWithDefense checks if we should override the deep search result with defensive play
+func (r *optimizedRobotPlayer) shouldOverrideWithDefense(result *pointAndValue) bool {
+	if result == nil {
+		return false
+	}
+	
+	// If we found a critical defensive move, check if the result ignores it
+	criticalDefense := r.findCriticalDefensiveMove()
+	if criticalDefense == nil {
+		return false
+	}
+	
+	// If the result is not the critical defense move, we should override
+	return result.p.x != criticalDefense.p.x || result.p.y != criticalDefense.p.y
 }
