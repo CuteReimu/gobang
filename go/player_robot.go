@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
 	"sort"
-	"time"
 )
 
 // EvaluationParams holds configurable evaluation parameters
@@ -1371,33 +1369,7 @@ func (r *optimizedRobotPlayer) exists4Single(p point, color playerColor) bool {
 	return false
 }
 
-// getImprovedAdaptiveDepth returns adaptive search depth with better tactical awareness
-func (r *optimizedRobotPlayer) getImprovedAdaptiveDepth() int {
-	baseDepth := r.maxLevelCount
 
-	// Check for complex tactical positions that require deeper analysis
-	if r.hasComplexThreats() {
-		return min(baseDepth+2, 8) // Deeper search for complex tactical positions, max 8
-	}
-
-	// Check for immediate threats that require deeper analysis
-	if r.hasImmediateThreats() {
-		return min(baseDepth+2, 8) // Deeper search for tactical positions
-	}
-
-	// In opening, use full depth for better positioning
-	if r.count < 8 {
-		return baseDepth
-	}
-
-	// In middle game with many pieces, use deeper search for tactics
-	if r.count >= 8 && r.count < 25 {
-		return min(baseDepth+2, 8) // Critical tactical phase
-	}
-
-	// In endgame, use full depth
-	return baseDepth
-}
 
 // optimizedMax method for optimized robot player with better pruning
 func (r *optimizedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAndValue {
