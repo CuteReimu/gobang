@@ -1,12 +1,30 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"
 	"log"
 )
 
 func main() {
+	optimized := flag.Bool("optimized", false, "使用优化AI参数以获得更好性能")
+	balanced := flag.Bool("balanced", false, "使用平衡AI参数以获得更强棋力和合理速度")
+	benchmark := flag.Bool("benchmark", false, "运行AI性能基准测试")
+	flag.Parse()
+
+	if *benchmark {
+		benchmarkAI()
+		runSelfPlayTest()
+		testPerformance()
+		testLogicErrors()
+		return
+	}
+
+	runGameWithGUI(*optimized, *balanced)
+}
+
+func runGameWithGUI(optimized, balanced bool) {
 	hp := newHumanPlayer(colorWhite)
 	//hp := newHumanWatcher()
 	go func() {
@@ -14,7 +32,24 @@ func main() {
 		for i := 0; i < maxLen; i++ {
 			board[i] = make([]playerColor, maxLen)
 		}
-		players := []player{newRobotPlayer(colorBlack), hp} // 机器人先
+
+		var robot player
+		if balanced {
+			robot = newBalancedRobotPlayer(colorBlack)
+			fmt.Println("使用平衡AI参数以获得更强棋力和合理速度")
+		} else if optimized {
+			robot = newOptimizedRobotPlayer(colorBlack)
+			fmt.Println("使用增强优化AI（迭代加深搜索，时间管理）")
+			fmt.Println("- 迭代加深：先搜索4层，再尝试6层")
+			fmt.Println("- 时间管理：6层搜索超过60秒自动终止")
+			fmt.Println("- 增强评估：改进着法排序提升剪枝效率")
+			fmt.Println("- 战术平衡：保持速度的同时确保战术强度")
+		} else {
+			robot = newRobotPlayer(colorBlack)
+			fmt.Println("使用默认AI参数")
+		}
+
+		players := []player{robot, hp} // 机器人先
 		//players := []player{hp, newRobotPlayer(colorWhite)} // 玩家先
 		//players := []player{newRobotPlayer(colorBlack), newRobotPlayer(colorWhite)}
 		var watchers []*humanWatcher

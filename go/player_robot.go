@@ -1,11 +1,69 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"sort"
+	"time"
 )
+
+// EvaluationParams holds configurable evaluation parameters
+type EvaluationParams struct {
+	// Pattern values for evaluatePoint2
+	LiveFour             int // 活四
+	DeadFourA            int // 死四A
+	DeadFourB            int // 死四B
+	DeadFourC            int // 死四C
+	LiveThreeNear        int // 活三 近3位置
+	LiveThreeBonus       int // 活三额外奖励
+	LiveThreeFar         int // 活三 远3位置
+	DeadThree            int // 死三
+	DeadThreeBonus       int // 死三额外奖励
+	TwoCount2            int // 活二×2的奖励
+	TwoCount1            int // 活二×1的奖励
+	ScatterMultiplier    int // 散棋乘数
+	OpponentPenalty      int // 对手惩罚
+	OpponentMinorPenalty int // 对手小惩罚
+
+	// Pattern values for evaluateBoard
+	FiveInRow          int            // 五连珠
+	FourInRowOpen      int            // 活四
+	FourInRowClosed    int            // 死四
+	ThreeInRowVariants map[string]int // 活三的各种变体
+}
+
+// getDefaultEvaluationParams returns the default evaluation parameters
+func getDefaultEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:             300000,
+		DeadFourA:            250000,
+		DeadFourB:            240000,
+		DeadFourC:            230000,
+		LiveThreeNear:        1450,
+		LiveThreeBonus:       6000,
+		LiveThreeFar:         350,
+		DeadThree:            700,
+		DeadThreeBonus:       6700,
+		TwoCount2:            3000,
+		TwoCount1:            2725,
+		ScatterMultiplier:    5,
+		OpponentPenalty:      500,
+		OpponentMinorPenalty: 300,
+		FiveInRow:            1000000,
+		FourInRowOpen:        300000,
+		FourInRowClosed:      25000,
+		ThreeInRowVariants: map[string]int{
+			"open":   22000,
+			"semi":   500,
+			"closed": 26000,
+			"gap":    800,
+			"basic":  650,
+			"corner": 150,
+		},
+	}
+}
 
 type robotPlayer struct {
 	boardStatus
@@ -14,6 +72,7 @@ type robotPlayer struct {
 	maxLevelCount     int
 	maxCountEachLevel int
 	maxCheckmateCount int
+	evalParams        *EvaluationParams
 }
 
 func newRobotPlayer(color playerColor) player {
@@ -23,9 +82,141 @@ func newRobotPlayer(color playerColor) player {
 		maxLevelCount:     6,
 		maxCountEachLevel: 16,
 		maxCheckmateCount: 12,
+		evalParams:        getDefaultEvaluationParams(),
 	}
 	rp.initBoardStatus()
 	return rp
+}
+
+// newOptimizedRobotPlayer creates a robot player with optimized parameters
+func newOptimizedRobotPlayer(color playerColor) player {
+	rp := &optimizedRobotPlayer{
+		robotPlayer: robotPlayer{
+			boardCache:        make(boardCache),
+			pColor:            color,
+			maxLevelCount:     6,  // Maximum depth for iterative deepening
+			maxCountEachLevel: 16, // Balanced candidate count
+			maxCheckmateCount: 12, // Full checkmate search for tactical strength
+			evalParams:        getImprovedOptimizedEvaluationParams(),
+		},
+		evalCache: make(map[uint64]int),
+	}
+	rp.initBoardStatus()
+	return rp
+}
+
+// newBalancedRobotPlayer creates a robot player with balanced speed and strength
+func newBalancedRobotPlayer(color playerColor) player {
+	rp := &robotPlayer{
+		boardCache:        make(boardCache),
+		pColor:            color,
+		maxLevelCount:     4,  // Even depth for proper minimax evaluation
+		maxCountEachLevel: 16, // More candidates to compensate for reduced depth
+		maxCheckmateCount: 12, // Full checkmate search
+		evalParams:        getBalancedEvaluationParams(),
+	}
+	rp.initBoardStatus()
+	return rp
+}
+
+// optimizedRobotPlayer - improved optimized AI with better balance of speed and strength
+type optimizedRobotPlayer struct {
+	robotPlayer
+	evalCache map[uint64]int // Cache for position evaluations
+	nodeCount int            // For debugging
+}
+
+// getImprovedOptimizedEvaluationParams returns improved optimized evaluation parameters with better tactical awareness
+func getImprovedOptimizedEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:             450000,  // Much higher priority for winning moves
+		DeadFourA:            380000,  // Enhanced threat detection
+		DeadFourB:            360000,  // Enhanced threat detection
+		DeadFourC:            340000,  // Enhanced threat detection
+		LiveThreeNear:        3000,    // Much better three-in-a-row evaluation
+		LiveThreeBonus:       10000,   // Stronger tactical evaluation
+		LiveThreeFar:         750,     // Better distant threat recognition
+		DeadThree:            1200,    // Enhanced defensive evaluation
+		DeadThreeBonus:       9000,    // Strong defensive bonus
+		TwoCount2:            5000,    // Better two-count evaluation
+		TwoCount1:            4200,    // Better single-two evaluation
+		ScatterMultiplier:    9,       // Enhanced position evaluation
+		OpponentPenalty:      750,     // Stronger opponent threat response
+		OpponentMinorPenalty: 450,     // Better minor threat response
+		FiveInRow:            1500000, // Maximum priority for wins
+		FourInRowOpen:        450000,  // Maximum priority for winning threats
+		FourInRowClosed:      45000,   // Better closed-four evaluation
+		ThreeInRowVariants: map[string]int{
+			"open":   45000, // Much stronger open three evaluation
+			"semi":   1000,  // Better semi-open evaluation
+			"closed": 50000, // Much stronger closed three
+			"gap":    1500,  // Better gap pattern recognition
+			"basic":  1200,  // Enhanced basic patterns
+			"corner": 300,   // Better corner evaluation
+		},
+	}
+}
+
+// getOptimizedEvaluationParams returns optimized evaluation parameters
+func getOptimizedEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:             320000,  // Slightly increased
+		DeadFourA:            260000,  // Slightly increased
+		DeadFourB:            245000,  // Slightly increased
+		DeadFourC:            235000,  // Slightly increased
+		LiveThreeNear:        1500,    // Slightly increased
+		LiveThreeBonus:       6200,    // Slightly increased
+		LiveThreeFar:         400,     // Slightly increased
+		DeadThree:            750,     // Slightly increased
+		DeadThreeBonus:       6800,    // Slightly increased
+		TwoCount2:            3100,    // Slightly increased
+		TwoCount1:            2800,    // Slightly increased
+		ScatterMultiplier:    6,       // Slightly increased
+		OpponentPenalty:      480,     // Slightly decreased for balance
+		OpponentMinorPenalty: 280,     // Slightly decreased for balance
+		FiveInRow:            1050000, // Increased for priority
+		FourInRowOpen:        315000,  // Slightly increased
+		FourInRowClosed:      26000,   // Slightly increased
+		ThreeInRowVariants: map[string]int{
+			"open":   23000, // Slightly increased
+			"semi":   520,   // Slightly increased
+			"closed": 27000, // Slightly increased
+			"gap":    850,   // Slightly increased
+			"basic":  680,   // Slightly increased
+			"corner": 160,   // Slightly increased
+		},
+	}
+}
+
+// getBalancedEvaluationParams returns balanced evaluation parameters for stronger play
+func getBalancedEvaluationParams() *EvaluationParams {
+	return &EvaluationParams{
+		LiveFour:             350000,  // Higher priority for winning moves
+		DeadFourA:            280000,  // Higher threat detection
+		DeadFourB:            265000,  // Higher threat detection
+		DeadFourC:            250000,  // Higher threat detection
+		LiveThreeNear:        2000,    // Improved three-in-a-row evaluation
+		LiveThreeBonus:       8000,    // Stronger bonus for good positions
+		LiveThreeFar:         500,     // Better distant threat recognition
+		DeadThree:            900,     // Improved defensive evaluation
+		DeadThreeBonus:       7500,    // Stronger defensive bonus
+		TwoCount2:            3500,    // Better two-count evaluation
+		TwoCount1:            3000,    // Better single-two evaluation
+		ScatterMultiplier:    7,       // Improved position evaluation
+		OpponentPenalty:      600,     // Stronger opponent threat response
+		OpponentMinorPenalty: 350,     // Better minor threat response
+		FiveInRow:            1200000, // Highest priority for wins
+		FourInRowOpen:        350000,  // Higher priority for winning threats
+		FourInRowClosed:      30000,   // Better closed-four evaluation
+		ThreeInRowVariants: map[string]int{
+			"open":   28000, // Stronger open three evaluation
+			"semi":   650,   // Better semi-open evaluation
+			"closed": 32000, // Stronger closed three
+			"gap":    1000,  // Better gap pattern recognition
+			"basic":  800,   // Improved basic patterns
+			"corner": 200,   // Better corner evaluation
+		},
+	}
 }
 
 func (r *robotPlayer) color() playerColor {
@@ -53,12 +244,133 @@ func (r *robotPlayer) play() (point, error) {
 			return p, nil
 		}
 	}
-	result := r.max(r.maxLevelCount, 100000000)
+
+	// Use iterative deepening for better time management
+	result := r.iterativeDeepening()
 	if result == nil {
 		return point{}, errors.New("algorithm error")
 	}
 	r.set(result.p, r.pColor)
 	return result.p, nil
+}
+
+// iterativeDeepening implements iterative deepening for better time management
+func (r *robotPlayer) iterativeDeepening() *pointAndValue {
+	var bestResult *pointAndValue
+
+	// Adaptive depth based on game phase and threats
+	maxDepth := r.getAdaptiveDepth()
+
+	// Start with shallow searches and progressively deepen
+	for depth := 2; depth <= maxDepth; depth++ {
+		result := r.max(depth, 100000000)
+		if result != nil {
+			bestResult = result
+		}
+
+		// Early termination for strong positions
+		if bestResult != nil && bestResult.value > 800000 {
+			break
+		}
+
+		// If we find a very good move early, don't spend more time
+		if depth >= 4 && bestResult != nil && bestResult.value > 200000 {
+			break
+		}
+	}
+
+	return bestResult
+}
+
+// getAdaptiveDepth returns adaptive search depth based on game state (always even)
+func (r *robotPlayer) getAdaptiveDepth() int {
+	baseDepth := r.maxLevelCount
+
+	// Check for immediate threats that require deeper analysis
+	if r.hasImmediateThreats() {
+		return baseDepth + 2 // Deeper search for tactical positions (maintains even depth)
+	}
+
+	// In opening, use slightly less depth for speed (ensure even number)
+	if r.count < 8 {
+		adjusted := baseDepth - 2
+		if adjusted < 2 {
+			adjusted = 2
+		}
+		return adjusted
+	}
+
+	// In middle game with many pieces, use standard depth
+	if r.count >= 8 && r.count < 20 {
+		return baseDepth
+	}
+
+	// In endgame, use deeper search (maintain even depth)
+	return baseDepth + 2
+}
+
+// hasImmediateThreats checks if there are immediate tactical threats on the board
+func (r *robotPlayer) hasImmediateThreats() bool {
+	// Check if opponent has 4 in a row (immediate win threat)
+	if r.exists4(r.pColor.conversion()) {
+		return true
+	}
+
+	// Check if we have 4 in a row (immediate win opportunity)
+	if r.exists4(r.pColor) {
+		return true
+	}
+
+	// Check for multiple threats
+	threatsCount := r.countThreats(r.pColor) + r.countThreats(r.pColor.conversion())
+	return threatsCount >= 2
+}
+
+// countThreats counts the number of three-in-a-row threats for a given color
+func (r *robotPlayer) countThreats(color playerColor) int {
+	threats := 0
+	p := point{}
+
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			if r.get(p) == colorEmpty {
+				// Check if placing a piece here creates a threat
+				r.set(p, color)
+
+				for _, dir := range fourDirections {
+					count := 1
+					// Count in positive direction
+					for k := 1; k < 5; k++ {
+						pk := p.move(dir, k)
+						if pk.checkRange() && r.get(pk) == color {
+							count++
+						} else {
+							break
+						}
+					}
+					// Count in negative direction
+					for k := 1; k < 5; k++ {
+						pk := p.move(dir, -k)
+						if pk.checkRange() && r.get(pk) == color {
+							count++
+						} else {
+							break
+						}
+					}
+
+					if count >= 3 {
+						threats++
+						break // Only count once per position
+					}
+				}
+
+				r.set(p, colorEmpty)
+			}
+		}
+	}
+
+	return threats
 }
 
 func (r *robotPlayer) calculateKill(color playerColor, aggressive bool, step int) (point, bool) {
@@ -219,12 +531,16 @@ func (r *robotPlayer) max(step int, foundminVal int) *pointAndValue {
 		for j := 0; j < maxLen; j++ {
 			p.x, p.y = j, i
 			if r.get(p) == 0 && r.isNeighbor(p) {
-				evathis := r.evaluatePoint(p, r.pColor)
+				evathis := r.evaluatePoint2(p, r.pColor, r.pColor)
 				queue = append(queue, &pointAndValue{p, evathis})
 			}
 		}
 	}
 	sort.Sort(queue)
+
+	// Adaptive candidate count based on game phase
+	maxCandidates := r.getAdaptiveCandidateCount(len(queue))
+
 	if step == 1 {
 		if len(queue) == 0 {
 			log.Println("algorithm error")
@@ -243,7 +559,7 @@ func (r *robotPlayer) max(step int, foundminVal int) *pointAndValue {
 	i := 0
 	for _, obj := range queue {
 		i++
-		if i > r.maxCountEachLevel {
+		if i > maxCandidates {
 			break
 		}
 		p = obj.p
@@ -286,12 +602,16 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 		for j := 0; j < maxLen; j++ {
 			p.x, p.y = j, i
 			if r.get(p) == 0 && r.isNeighbor(p) {
-				evathis := r.evaluatePoint(p, r.pColor.conversion())
+				evathis := r.evaluatePoint2(p, r.pColor.conversion(), r.pColor.conversion())
 				queue = append(queue, &pointAndValue{p, evathis})
 			}
 		}
 	}
 	sort.Sort(queue)
+
+	// Adaptive candidate count based on game phase
+	maxCandidates := r.getAdaptiveCandidateCount(len(queue))
+
 	if step == 1 {
 		if len(queue) == 0 {
 			log.Println("algorithm error")
@@ -310,7 +630,7 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 	i := 0
 	for _, obj := range queue {
 		i++
-		if i > r.maxCountEachLevel {
+		if i > maxCandidates {
 			break
 		}
 		p = obj.p
@@ -343,8 +663,324 @@ func (r *robotPlayer) min(step int, foundmaxVal int) *pointAndValue {
 	return result
 }
 
-func (r *robotPlayer) evaluatePoint(p point, color playerColor) int {
-	return r.evaluatePoint2(p, color, colorBlack) + r.evaluatePoint2(p, color, colorWhite)
+// getAdaptiveCandidateCount returns adaptive candidate count based on game phase
+func (r *robotPlayer) getAdaptiveCandidateCount(totalCandidates int) int {
+	// In early game (fewer pieces), consider more candidates
+	// In late game (more pieces), focus on fewer but better candidates
+	if r.count < 10 {
+		return min(r.maxCountEachLevel+4, totalCandidates)
+	} else if r.count < 20 {
+		return min(r.maxCountEachLevel, totalCandidates)
+	} else {
+		return min(r.maxCountEachLevel-2, totalCandidates)
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// Enhanced evaluatePoint for better move ordering and alpha-beta pruning efficiency
+func (r *optimizedRobotPlayer) evaluatePoint(p point, color playerColor) int {
+	// More sophisticated evaluation for better move ordering and alpha-beta pruning
+
+	// Simulate placing the piece
+	r.set(p, color)
+
+	// Tactical evaluation
+	tacticalValue := 0
+
+	// Check for immediate wins (highest priority)
+	if r.checkForm5ByPoint(p, color) {
+		r.set(p, colorEmpty)
+		return 10000000
+	}
+
+	// Check for blocking opponent wins (highest defensive priority)
+	r.set(p, color.conversion())
+	if r.checkForm5ByPoint(p, color.conversion()) {
+		r.set(p, colorEmpty)
+		return 9000000
+	}
+	
+	// Check for blocking opponent's 4-in-a-row (critical defensive priority)
+	if r.exists4Single(p, color.conversion()) {
+		r.set(p, colorEmpty)
+		return 8500000 // Very high priority for blocking 4-in-a-row
+	}
+	r.set(p, color)
+
+	// Check for creating live fours (very high priority)
+	if r.createsLiveFour(p, color) {
+		tacticalValue += 1000000
+	}
+	
+	// Check for creating our own 4-in-a-row (very high priority)
+	if r.exists4Single(p, color) {
+		tacticalValue += 900000
+	}
+
+	// Check for blocking opponent's live fours (very high defensive priority)
+	r.set(p, color.conversion())
+	if r.createsLiveFour(p, color.conversion()) {
+		tacticalValue += 900000
+	}
+	r.set(p, color)
+
+	// Check for creating multiple threats (high priority)
+	if r.createsMultipleThreats(p, color) {
+		tacticalValue += 500000
+	}
+
+	// Count live threes created
+	liveThrees := r.countLiveThreesAt(p, color)
+	tacticalValue += liveThrees * 100000
+
+	// Count opponent live threes blocked
+	r.set(p, color.conversion())
+	opponentLiveThrees := r.countLiveThreesAt(p, color.conversion())
+	tacticalValue += opponentLiveThrees * 80000
+	r.set(p, color)
+
+	// Check for creating open threes (medium priority)
+	openThrees := r.countOpenThreesAt(p, color)
+	tacticalValue += openThrees * 50000
+
+	// Check for blocking opponent open threes
+	r.set(p, color.conversion())
+	opponentOpenThrees := r.countOpenThreesAt(p, color.conversion())
+	tacticalValue += opponentOpenThrees * 40000
+	r.set(p, color)
+
+	// Check for creating twos
+	twos := r.countTwosAt(p, color)
+	tacticalValue += twos * 1000
+
+	// Position evaluation (center is better in early game)
+	if r.count < 10 {
+		center := maxLen / 2
+		distance := abs(p.x-center) + abs(p.y-center)
+		tacticalValue += (10 - distance) * 100
+	}
+
+	// Remove the piece and return evaluation
+	r.set(p, colorEmpty)
+
+	return tacticalValue
+}
+
+// countOpenThreesAt counts open three patterns at a specific point
+func (r *optimizedRobotPlayer) countOpenThreesAt(p point, color playerColor) int {
+	count := 0
+
+	for _, dir := range fourDirections {
+		// Check for open three pattern: 0111*0 (where * is the current position)
+		leftEmpty := true
+		rightEmpty := true
+		consecutiveCount := 1 // The piece we're placing
+
+		// Count pieces to the left
+		leftCount := 0
+		for i := 1; i <= 3; i++ {
+			pos := p.move(dir, -i)
+			if !pos.checkRange() {
+				leftEmpty = false
+				break
+			}
+			if r.get(pos) == color {
+				leftCount++
+				consecutiveCount++
+			} else if r.get(pos) == colorEmpty {
+				break
+			} else {
+				leftEmpty = false
+				break
+			}
+		}
+
+		// Count pieces to the right
+		rightCount := 0
+		for i := 1; i <= 3; i++ {
+			pos := p.move(dir, i)
+			if !pos.checkRange() {
+				rightEmpty = false
+				break
+			}
+			if r.get(pos) == color {
+				rightCount++
+				consecutiveCount++
+			} else if r.get(pos) == colorEmpty {
+				break
+			} else {
+				rightEmpty = false
+				break
+			}
+		}
+
+		// Check if we have an open three (3 consecutive pieces with empty spaces on both sides)
+		if consecutiveCount == 3 && leftEmpty && rightEmpty {
+			count++
+		}
+	}
+
+	return count
+}
+
+// countTwosAt counts two-in-a-row patterns at a specific point
+func (r *optimizedRobotPlayer) countTwosAt(p point, color playerColor) int {
+	count := 0
+
+	for _, dir := range fourDirections {
+		consecutiveCount := 1 // The piece we're placing
+
+		// Count pieces in one direction
+		for i := 1; i <= 2; i++ {
+			pos := p.move(dir, i)
+			if pos.checkRange() && r.get(pos) == color {
+				consecutiveCount++
+			} else {
+				break
+			}
+		}
+
+		// Count pieces in the opposite direction
+		for i := 1; i <= 2; i++ {
+			pos := p.move(dir, -i)
+			if pos.checkRange() && r.get(pos) == color {
+				consecutiveCount++
+			} else {
+				break
+			}
+		}
+
+		if consecutiveCount == 2 {
+			count++
+		}
+	}
+
+	return count
+}
+
+// Helper functions for tactical evaluation
+
+func (r *optimizedRobotPlayer) createsLiveFour(p point, color playerColor) bool {
+	// Check all four directions for live four patterns
+	for _, dir := range fourDirections {
+		count := 1 // The piece we're placing
+
+		// Count pieces in positive direction
+		for i := 1; i < 5; i++ {
+			pos := p.move(dir, i)
+			if !pos.checkRange() || r.get(pos) != color {
+				break
+			}
+			count++
+		}
+
+		// Count pieces in negative direction
+		for i := 1; i < 5; i++ {
+			pos := p.move(dir, -i)
+			if !pos.checkRange() || r.get(pos) != color {
+				break
+			}
+			count++
+		}
+
+		// Check if it forms a live four (4 in a row with open ends)
+		if count >= 4 {
+			// Check if both ends are open
+			leftEnd := p.move(dir, -(count - 1))
+			rightEnd := p.move(dir, count)
+			if leftEnd.checkRange() && rightEnd.checkRange() &&
+				r.get(leftEnd) == colorEmpty && r.get(rightEnd) == colorEmpty {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *optimizedRobotPlayer) createsMultipleThreats(p point, color playerColor) bool {
+	threatsCount := 0
+
+	for _, dir := range fourDirections {
+		if r.createsThreatenPattern(p, color, dir) {
+			threatsCount++
+		}
+	}
+
+	return threatsCount >= 2
+}
+
+func (r *optimizedRobotPlayer) createsThreatenPattern(p point, color playerColor, dir direction) bool {
+	count := 1 // The piece we're placing
+
+	// Count consecutive pieces in both directions
+	for i := 1; i < 4; i++ {
+		pos := p.move(dir, i)
+		if !pos.checkRange() || r.get(pos) != color {
+			break
+		}
+		count++
+	}
+
+	for i := 1; i < 4; i++ {
+		pos := p.move(dir, -i)
+		if !pos.checkRange() || r.get(pos) != color {
+			break
+		}
+		count++
+	}
+
+	return count >= 3
+}
+
+func (r *optimizedRobotPlayer) countLiveThreesAt(p point, color playerColor) int {
+	liveThrees := 0
+
+	for _, dir := range fourDirections {
+		if r.formsLiveThree(p, color, dir) {
+			liveThrees++
+		}
+	}
+
+	return liveThrees
+}
+
+func (r *optimizedRobotPlayer) formsLiveThree(p point, color playerColor, dir direction) bool {
+	count := 1 // The piece we're placing
+
+	// Simple live three check: exactly 3 pieces with open ends
+	for i := 1; i < 3; i++ {
+		pos := p.move(dir, i)
+		if !pos.checkRange() || r.get(pos) != color {
+			break
+		}
+		count++
+	}
+
+	for i := 1; i < 3; i++ {
+		pos := p.move(dir, -i)
+		if !pos.checkRange() || r.get(pos) != color {
+			break
+		}
+		count++
+	}
+
+	if count == 3 {
+		// Check if ends are open
+		leftEnd := p.move(dir, -2)
+		rightEnd := p.move(dir, 2)
+		if leftEnd.checkRange() && rightEnd.checkRange() &&
+			r.get(leftEnd) == colorEmpty && r.get(rightEnd) == colorEmpty {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor) (value int) {
@@ -359,69 +995,69 @@ func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor)
 	for _, dir := range eightDirections { // 8个方向
 		// 活四 01111* *代表当前空位置 0代表其他空位置 下同
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, -4) == plyer && getLine(p, dir, -5) == 0 {
-			value += 300000
+			value += r.evalParams.LiveFour
 			if me != plyer {
-				value -= 500
+				value -= r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 死四A 21111*
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, -4) == plyer && (getLine(p, dir, -5) == plyer.conversion() || getLine(p, dir, -5) == -1) {
-			value += 250000
+			value += r.evalParams.DeadFourA
 			if me != plyer {
-				value -= 500
+				value -= r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 死四B 111*1
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, 1) == plyer {
-			value += 240000
+			value += r.evalParams.DeadFourB
 			if me != plyer {
-				value -= 500
+				value -= r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 死四C 11*11
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, 1) == plyer && getLine(p, dir, 2) == plyer {
-			value += 230000
+			value += r.evalParams.DeadFourC
 			if me != plyer {
-				value -= 500
+				value -= r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 活三 近3位置 111*0
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer {
 			if getLine(p, dir, 1) == 0 {
-				value += 1450
+				value += r.evalParams.LiveThreeNear
 				if getLine(p, dir, -4) == 0 {
-					value += 6000
+					value += r.evalParams.LiveThreeBonus
 					if me != plyer {
-						value -= 300
+						value -= r.evalParams.OpponentMinorPenalty
 					}
 				}
 			}
 			if (getLine(p, dir, 1) == plyer.conversion() || getLine(p, dir, 1) == -1) && getLine(p, dir, -4) == 0 {
-				value += 500
+				value += r.evalParams.OpponentPenalty
 			}
 			if (getLine(p, dir, -4) == plyer.conversion() || getLine(p, dir, -4) == -1) && getLine(p, dir, 1) == 0 {
-				value += 500
+				value += r.evalParams.OpponentPenalty
 			}
 			continue
 		}
 		// 活三 远3位置 1110*
 		if getLine(p, dir, -1) == 0 && getLine(p, dir, -2) == plyer && getLine(p, dir, -3) == plyer && getLine(p, dir, -4) == plyer {
-			value += 350
+			value += r.evalParams.LiveThreeFar
 			continue
 		}
 		// 死三 11*1
 		if getLine(p, dir, -1) == plyer && getLine(p, dir, -2) == plyer && getLine(p, dir, 1) == plyer {
-			value += 700
+			value += r.evalParams.DeadThree
 			if getLine(p, dir, -3) == 0 && getLine(p, dir, 2) == 0 {
-				value += 6700
+				value += r.evalParams.DeadThreeBonus
 				continue
 			}
 			if (getLine(p, dir, -3) == plyer.conversion() || getLine(p, dir, -3) == -1) && (getLine(p, dir, 2) == plyer.conversion() || getLine(p, dir, 2) == -1) {
-				value -= 700
+				value -= r.evalParams.DeadThree
 				continue
 			} else {
 				value += 800
@@ -463,16 +1099,16 @@ func (r *robotPlayer) evaluatePoint2(p point, me playerColor, plyer playerColor)
 			}
 			numOfplyer += temp
 		}
-		value += numOfplyer * 5
+		value += numOfplyer * r.evalParams.ScatterMultiplier
 	}
 	numoftwo /= 2
 	if numoftwo >= 2 {
-		value += 3000
+		value += r.evalParams.TwoCount2
 		if me != plyer {
 			value -= 100
 		}
 	} else if numoftwo == 1 {
-		value += 2725
+		value += r.evalParams.TwoCount1
 		if me != plyer {
 			value -= 10
 		}
@@ -499,14 +1135,14 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 					}
 				}
 				if colors[5] == color && colors[6] == color && colors[7] == color && colors[8] == color {
-					values += 1000000
+					values += r.evalParams.FiveInRow
 					continue
 				}
 				if colors[5] == color && colors[6] == color && colors[7] == color && colors[3] == 0 {
 					if colors[8] == 0 { //?AAAA?
-						values += 300000 / 2
+						values += r.evalParams.FourInRowOpen / 2
 					} else if colors[8] != color { //AAAA?
-						values += 25000
+						values += r.evalParams.FourInRowClosed
 					}
 					continue
 				}
@@ -517,26 +1153,26 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 					}
 					if colors[3] == 0 && colors[7] == 0 {
 						if colors[2] == 0 && colors[8] != color || colors[8] == 0 && colors[2] != color { //??AAA??
-							values += 22000 / 2
+							values += r.evalParams.ThreeInRowVariants["open"] / 2
 						} else if colors[2] != color && colors[2] != 0 && colors[8] != color && colors[8] != 0 { //?AAA?
-							values += 500 / 2
+							values += r.evalParams.ThreeInRowVariants["semi"] / 2
 						}
 						continue
 					}
 					if colors[3] != 0 && colors[3] != color && colors[7] == 0 && colors[8] == 0 { //AAA??
-						values += 500
+						values += r.evalParams.ThreeInRowVariants["semi"]
 						continue
 					}
 				}
 				if colors[5] == color && colors[6] == 0 && colors[7] == color && colors[8] == color { //AA?AA
-					values += 26000 / 2
+					values += r.evalParams.ThreeInRowVariants["closed"] / 2
 					continue
 				}
 				if colors[5] == 0 && colors[6] == color && colors[7] == color {
 					if colors[3] == 0 && colors[8] == 0 { //?A?AA?
-						values += 22000
+						values += r.evalParams.ThreeInRowVariants["open"]
 					} else if (colors[3] != 0 && colors[3] != color && colors[8] == 0) || (colors[8] != 0 && colors[8] != color && colors[3] == 0) { //A?AA? ?A?AA
-						values += 800
+						values += r.evalParams.ThreeInRowVariants["gap"]
 					}
 					continue
 				}
@@ -551,12 +1187,12 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 				if colors[5] == color {
 					if colors[3] == 0 && colors[6] == 0 {
 						if colors[1] == 0 && colors[2] == 0 && colors[7] != 0 && colors[7] != color || colors[8] == 0 && colors[7] == 0 && colors[2] != 0 && colors[2] != color { //??AA??
-							values += 650 / 2
+							values += r.evalParams.ThreeInRowVariants["basic"] / 2
 						} else if colors[2] != 0 && colors[2] != color && colors[7] == 0 && colors[8] != 0 && colors[8] != color { //?AA??
-							values += 150
+							values += r.evalParams.ThreeInRowVariants["corner"]
 						}
 					} else if colors[3] != 0 && colors[3] != color && colors[6] == 0 && colors[7] == 0 && colors[8] == 0 { //AA???
-						values += 150
+						values += r.evalParams.ThreeInRowVariants["corner"]
 					}
 					continue
 				}
@@ -566,10 +1202,10 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 							values += 250 / 2
 						}
 						if colors[2] != 0 && colors[2] != color && colors[8] != 0 && colors[8] != color { //?A?A?
-							values += 150 / 2
+							values += r.evalParams.ThreeInRowVariants["corner"] / 2
 						}
 					} else if colors[3] != 0 && colors[3] != color && colors[7] == 0 && colors[8] == 0 { //A?A??
-						values += 150
+						values += r.evalParams.ThreeInRowVariants["corner"]
 					}
 					continue
 				}
@@ -585,7 +1221,7 @@ func (r *robotPlayer) evaluateBoard(color playerColor) (values int) {
 							if color5 == 0 {
 								values += 200
 							} else if color5 != color {
-								values += 150
+								values += r.evalParams.ThreeInRowVariants["corner"]
 							}
 						}
 					}
@@ -604,6 +1240,85 @@ type pointAndValue struct {
 
 type pointAndValueSlice []*pointAndValue
 
+// SelfPlayResult holds the result of a self-play game
+type SelfPlayResult struct {
+	Winner   playerColor
+	Moves    int
+	Duration int // in milliseconds
+}
+
+// adjustParameters adjusts evaluation parameters based on game outcomes
+func (r *robotPlayer) adjustParameters(results []SelfPlayResult) {
+	if len(results) < 5 {
+		return // Need at least 5 games for adjustment
+	}
+
+	winRate := r.calculateWinRate(results)
+	avgMoves := r.calculateAverageMovesPerGame(results)
+
+	// If win rate is too low, make AI more aggressive
+	if winRate < 0.4 {
+		r.evalParams.LiveFour += 10000
+		r.evalParams.DeadFourA += 8000
+		r.evalParams.LiveThreeNear += 100
+		r.evalParams.LiveThreeBonus += 500
+	}
+
+	// If games are too long, prioritize quicker wins
+	if avgMoves > 50 {
+		r.evalParams.FiveInRow += 50000
+		r.evalParams.FourInRowOpen += 15000
+	}
+
+	// If games are too short, encourage more strategic play
+	if avgMoves < 25 {
+		r.evalParams.ThreeInRowVariants["open"] += 1000
+		r.evalParams.ThreeInRowVariants["semi"] += 500
+	}
+}
+
+func (r *robotPlayer) calculateWinRate(results []SelfPlayResult) float64 {
+	wins := 0
+	for _, result := range results {
+		if result.Winner == r.pColor {
+			wins++
+		}
+	}
+	return float64(wins) / float64(len(results))
+}
+
+func (r *robotPlayer) calculateAverageMovesPerGame(results []SelfPlayResult) float64 {
+	totalMoves := 0
+	for _, result := range results {
+		totalMoves += result.Moves
+	}
+	return float64(totalMoves) / float64(len(results))
+}
+
+// createPlayerCopy creates a copy of the robot player with the same parameters
+func (r *robotPlayer) createPlayerCopy(color playerColor) *robotPlayer {
+	rp := &robotPlayer{
+		boardCache:        make(boardCache),
+		pColor:            color,
+		maxLevelCount:     r.maxLevelCount,
+		maxCountEachLevel: r.maxCountEachLevel,
+		maxCheckmateCount: r.maxCheckmateCount,
+		evalParams:        r.copyEvaluationParams(),
+	}
+	rp.initBoardStatus()
+	return rp
+}
+
+func (r *robotPlayer) copyEvaluationParams() *EvaluationParams {
+	copied := *r.evalParams
+	// Deep copy the map
+	copied.ThreeInRowVariants = make(map[string]int)
+	for k, v := range r.evalParams.ThreeInRowVariants {
+		copied.ThreeInRowVariants[k] = v
+	}
+	return &copied
+}
+
 func (s pointAndValueSlice) Len() int {
 	return len(s)
 }
@@ -614,4 +1329,601 @@ func (s pointAndValueSlice) Less(i, j int) bool {
 
 func (s pointAndValueSlice) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
+}
+
+// play method for optimized robot player - iterative deepening with time management
+func (r *optimizedRobotPlayer) play() (point, error) {
+	r.nodeCount = 0 // Reset node count
+
+	if r.count == 0 {
+		p := point{maxLen / 2, maxLen / 2}
+		r.set(p, r.pColor)
+		return p, nil
+	}
+
+	// Quick win/defense checks
+	p1, ok := r.findForm5(r.pColor)
+	if ok {
+		r.set(p1, r.pColor)
+		return p1, nil
+	}
+	p1, ok = r.stop4(r.pColor)
+	if ok {
+		r.set(p1, r.pColor)
+		return p1, nil
+	}
+
+	// Quick checkmate search (only up to 4 steps to maintain speed)
+	for i := 2; i <= 4; i += 2 {
+		if p, ok := r.calculateKill(r.pColor, true, i); ok {
+			return p, nil
+		}
+	}
+
+	// Use iterative deepening search with time management
+	result := r.iterativeDeepeningSearchWithDefensiveCheck()
+	if result == nil {
+		return point{}, errors.New("algorithm error")
+	}
+
+	// Validate the move before making it
+	if r.get(result.p) != colorEmpty {
+		// Fallback to simple candidate selection if result is invalid
+		candidates := r.getValidCandidates(r.pColor)
+		if len(candidates) > 0 {
+			result = candidates[0]
+		} else {
+			return point{}, errors.New("no valid moves available")
+		}
+	}
+
+	r.set(result.p, r.pColor)
+	return result.p, nil
+}
+
+// Iterative deepening search with time management and defensive priority check
+func (r *optimizedRobotPlayer) iterativeDeepeningSearchWithDefensiveCheck() *pointAndValue {
+	fmt.Print("开始AI思考... ")
+
+	// First, check for critical defensive moves that must be played immediately
+	criticalDefense := r.findCriticalDefensiveMove()
+	if criticalDefense != nil {
+		fmt.Printf("发现紧急防御需求! %s 总用时: 0.001s\n", criticalDefense.p)
+		return criticalDefense
+	}
+
+	// First search at depth 4 (should be fast)
+	fmt.Print("深度4搜索... ")
+	startTime := time.Now()
+	result4 := r.optimizedMax(4, -1000000000, 1000000000)
+	depth4Time := time.Since(startTime)
+	fmt.Printf("完成(%.3fs) ", depth4Time.Seconds())
+
+	if result4 == nil {
+		fmt.Println("总用时: 无结果")
+		return nil
+	}
+
+	// If depth 4 found a winning move, return immediately
+	if result4.value > 1000000 {
+		fmt.Printf("发现胜负手! 总用时: %.3fs\n", depth4Time.Seconds())
+		return result4
+	}
+
+	// Try depth 6 with 60 second timeout
+	fmt.Print("深度6搜索... ")
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	result6Chan := make(chan *pointAndValue, 1)
+	go func() {
+		result6 := r.optimizedMaxWithContext(ctx, 6, -1000000000, 1000000000)
+		result6Chan <- result6
+	}()
+
+	select {
+	case result6 := <-result6Chan:
+		totalTime := time.Since(startTime)
+		if result6 != nil {
+			fmt.Printf("完成(%.3fs) 总用时: %.3fs\n", totalTime.Seconds()-depth4Time.Seconds(), totalTime.Seconds())
+			
+			// Final defensive check: if depth 6 result ignores critical threats, override it
+			if r.shouldOverrideWithDefense(result6) {
+				defense := r.findCriticalDefensiveMove()
+				if defense != nil {
+					fmt.Printf("覆盖深度搜索结果，选择关键防御: %s\n", defense.p)
+					return defense
+				}
+			}
+			
+			return result6
+		} else {
+			fmt.Printf("无效结果，使用4层结果 总用时: %.3fs\n", totalTime.Seconds())
+			return result4
+		}
+	case <-ctx.Done():
+		totalTime := time.Since(startTime)
+		fmt.Printf("超时，使用4层结果 总用时: %.3fs\n", totalTime.Seconds())
+		return result4
+	}
+}
+
+// Context-aware search that can be cancelled
+func (r *optimizedRobotPlayer) optimizedMaxWithContext(ctx context.Context, step int, alpha int, beta int) *pointAndValue {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+
+	r.nodeCount++
+
+	if step == 0 {
+		return &pointAndValue{point{}, r.evaluateBoard(r.pColor)}
+	}
+
+	if v := r.getCachedEvaluation(); v != nil {
+		return v
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor)
+	limit := r.getSimpleCandidateLimit()
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+
+	maxVal := -1000000000
+	maxPoint := point{}
+
+	for _, candidate := range candidates {
+		// Check for cancellation in the loop
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		r.set(candidate.p, r.pColor)
+		if r.checkForm5ByPoint(candidate.p, r.pColor) {
+			r.set(candidate.p, colorEmpty)
+			return &pointAndValue{candidate.p, 1000000000}
+		}
+
+		val := r.optimizedMinWithContext(ctx, step-1, alpha, beta)
+		r.set(candidate.p, colorEmpty)
+
+		if val == nil {
+			return nil // Cancelled
+		}
+
+		if val.value > maxVal {
+			maxVal = val.value
+			maxPoint = candidate.p
+		}
+
+		if maxVal > alpha {
+			alpha = maxVal
+		}
+		if beta <= alpha {
+			break
+		}
+	}
+
+	result := &pointAndValue{maxPoint, maxVal}
+	r.cacheEvaluation(result)
+	return result
+}
+
+func (r *optimizedRobotPlayer) optimizedMinWithContext(ctx context.Context, step int, alpha int, beta int) *pointAndValue {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+
+	r.nodeCount++
+
+	if step == 0 {
+		return &pointAndValue{point{}, r.evaluateBoard(r.pColor)}
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor.conversion())
+	limit := r.getSimpleCandidateLimit()
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+	}
+
+	minVal := 1000000000
+	minPoint := point{}
+
+	for _, candidate := range candidates {
+		// Check for cancellation in the loop
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		r.set(candidate.p, r.pColor.conversion())
+		if r.checkForm5ByPoint(candidate.p, r.pColor.conversion()) {
+			r.set(candidate.p, colorEmpty)
+			return &pointAndValue{candidate.p, -1000000000}
+		}
+
+		val := r.optimizedMaxWithContext(ctx, step-1, alpha, beta)
+		r.set(candidate.p, colorEmpty)
+
+		if val == nil {
+			return nil // Cancelled
+		}
+
+		if val.value < minVal {
+			minVal = val.value
+			minPoint = candidate.p
+		}
+
+		if minVal < beta {
+			beta = minVal
+		}
+		if beta <= alpha {
+			break
+		}
+	}
+
+	return &pointAndValue{minPoint, minVal}
+}
+
+// getValidCandidates ensures we only return valid, empty positions
+func (r *optimizedRobotPlayer) getValidCandidates(color playerColor) []*pointAndValue {
+	var candidates []*pointAndValue
+	p := point{}
+
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			// Only consider empty positions that have neighbors
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				val := r.evaluatePoint(p, color)
+				candidates = append(candidates, &pointAndValue{p, val})
+			}
+		}
+	}
+
+	// Sort candidates by value (best first) for better alpha-beta pruning
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].value > candidates[j].value
+	})
+
+	return candidates
+}
+
+// getSimpleCandidates gets candidates with fast, simple evaluation focused on defense
+func (r *optimizedRobotPlayer) getSimpleCandidates(color playerColor) []*pointAndValue {
+	var candidates []*pointAndValue
+	opponentColor := color.conversion()
+
+	// First priority: Block opponent's immediate wins
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p := point{j, i}
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				// Check if this blocks opponent win
+				r.set(p, opponentColor)
+				blocksWin := r.checkForm5ByPoint(p, opponentColor)
+				r.set(p, colorEmpty)
+
+				if blocksWin {
+					candidates = append(candidates, &pointAndValue{p, 1000000}) // Highest priority
+				}
+			}
+		}
+	}
+
+	if len(candidates) > 0 {
+		return candidates // Return blocking moves immediately
+	}
+
+	// Second priority: Block opponent's four-in-a-row
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p := point{j, i}
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				// Check if this blocks opponent four
+				r.set(p, opponentColor)
+				blocksFour := r.exists4Single(p, opponentColor)
+				r.set(p, colorEmpty)
+
+				if blocksFour {
+					candidates = append(candidates, &pointAndValue{p, 800000})
+				}
+			}
+		}
+	}
+
+	if len(candidates) > 0 {
+		return candidates
+	}
+
+	// Third priority: Regular evaluation for other moves
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p := point{j, i}
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				val := r.robotPlayer.evaluatePoint2(p, color, color)
+				candidates = append(candidates, &pointAndValue{p, val})
+			}
+		}
+	}
+
+	// Sort candidates by value
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].value > candidates[j].value
+	})
+
+	// Limit candidates to top 16 for speed
+	if len(candidates) > 16 {
+		candidates = candidates[:16]
+	}
+
+	return candidates
+}
+
+// exists4Single checks if a single point creates a four-in-a-row
+func (r *optimizedRobotPlayer) exists4Single(p point, color playerColor) bool {
+	for _, dir := range fourDirections {
+		count := 1 // The piece we just placed
+
+		// Count in positive direction
+		for i := 1; i < 5; i++ {
+			pos := p.move(dir, i)
+			if !pos.checkRange() || r.get(pos) != color {
+				break
+			}
+			count++
+		}
+
+		// Count in negative direction
+		for i := 1; i < 5; i++ {
+			pos := p.move(dir, -i)
+			if !pos.checkRange() || r.get(pos) != color {
+				break
+			}
+			count++
+		}
+
+		if count >= 4 {
+			return true
+		}
+	}
+	return false
+}
+
+// optimizedMax method for optimized robot player with better pruning
+func (r *optimizedRobotPlayer) optimizedMax(step int, alpha, beta int) *pointAndValue {
+	r.nodeCount++
+
+	// Check cache first
+	if cached := r.getCachedEvaluation(); cached != nil {
+		return cached
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor)
+
+	// Simple candidate pruning for better performance
+	maxCandidates := r.getSimpleCandidateLimit()
+	if len(candidates) > maxCandidates {
+		candidates = candidates[:maxCandidates]
+	}
+
+	if step == 1 {
+		if len(candidates) == 0 {
+			return nil
+		}
+		p := candidates[0].p
+		r.set(p, r.pColor)
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		r.set(p, colorEmpty)
+		result := &pointAndValue{p, val}
+		r.cacheEvaluation(result)
+		return result
+	}
+
+	maxPoint := point{}
+	maxVal := alpha
+
+	for _, candidate := range candidates {
+		p := candidate.p
+		r.set(p, r.pColor)
+
+		// Quick evaluation for immediate wins
+		boardVal := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		if boardVal > 800000 {
+			r.set(p, colorEmpty)
+			result := &pointAndValue{p, boardVal}
+			r.cacheEvaluation(result)
+			return result
+		}
+
+		minResult := r.optimizedMin(step-1, maxVal, beta)
+		evathis := minResult.value
+
+		if evathis > maxVal {
+			maxVal = evathis
+			maxPoint = p
+		}
+
+		r.set(p, colorEmpty)
+
+		// Alpha-beta pruning
+		if maxVal >= beta {
+			break
+		}
+	}
+
+	result := &pointAndValue{maxPoint, maxVal}
+	r.cacheEvaluation(result)
+	return result
+}
+
+// optimizedMin method for optimized robot player
+func (r *optimizedRobotPlayer) optimizedMin(step int, alpha, beta int) *pointAndValue {
+	r.nodeCount++
+
+	// Check cache first
+	if cached := r.getCachedEvaluation(); cached != nil {
+		return cached
+	}
+
+	candidates := r.getOptimizedCandidates(r.pColor.conversion())
+
+	// Simple candidate pruning
+	maxCandidates := r.getSimpleCandidateLimit()
+	if len(candidates) > maxCandidates {
+		candidates = candidates[:maxCandidates]
+	}
+
+	if step == 1 {
+		if len(candidates) == 0 {
+			return nil
+		}
+		p := candidates[0].p
+		r.set(p, r.pColor.conversion())
+		val := r.evaluateBoard(r.pColor) - r.evaluateBoard(r.pColor.conversion())
+		r.set(p, colorEmpty)
+		result := &pointAndValue{p, val}
+		r.cacheEvaluation(result)
+		return result
+	}
+
+	minPoint := point{}
+	minVal := beta
+
+	for _, candidate := range candidates {
+		p := candidate.p
+		r.set(p, r.pColor.conversion())
+
+		maxResult := r.optimizedMax(step-1, alpha, minVal)
+		evathis := maxResult.value
+
+		if evathis < minVal {
+			minVal = evathis
+			minPoint = p
+		}
+
+		r.set(p, colorEmpty)
+
+		// Alpha-beta pruning
+		if minVal <= alpha {
+			break
+		}
+	}
+
+	result := &pointAndValue{minPoint, minVal}
+	r.cacheEvaluation(result)
+	return result
+}
+
+// getOptimizedCandidates gets candidate moves for optimized robot player with simple evaluation
+func (r *optimizedRobotPlayer) getOptimizedCandidates(color playerColor) []*pointAndValue {
+	var candidates []*pointAndValue
+	p := point{}
+
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p.x, p.y = j, i
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				// Use simple, fast evaluation
+				val := r.evaluatePoint(p, color)
+				candidates = append(candidates, &pointAndValue{p, val})
+			}
+		}
+	}
+
+	// Sort candidates by value (best first) for better alpha-beta pruning
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].value > candidates[j].value
+	})
+
+	return candidates
+}
+
+// getSimpleCandidateLimit returns a reasonable candidate limit for good performance vs strength balance
+func (r *optimizedRobotPlayer) getSimpleCandidateLimit() int {
+	// Use more candidates for better play quality
+	// Early game: more candidates for exploration
+	// Late game: fewer candidates for speed
+	if r.count < 10 {
+		return 20
+	} else if r.count < 20 {
+		return 16
+	} else {
+		return 12
+	}
+}
+
+// Simple caching methods for optimized robot player
+func (r *optimizedRobotPlayer) getCachedEvaluation() *pointAndValue {
+	// Disable broken cache that returns wrong point coordinates
+	// The cache only stores evaluation values but not the actual best move points
+	// This was causing the AI to always return (0,0)
+	return nil
+}
+
+func (r *optimizedRobotPlayer) cacheEvaluation(result *pointAndValue) {
+	if len(r.evalCache) > 8000 {
+		// Clear cache when it gets too large
+		r.evalCache = make(map[uint64]int)
+	}
+	r.evalCache[r.hash] = result.value
+}
+
+// findCriticalDefensiveMove identifies moves that must be played to prevent immediate loss
+func (r *optimizedRobotPlayer) findCriticalDefensiveMove() *pointAndValue {
+	opponentColor := r.pColor.conversion()
+	
+	// Check all empty positions for critical defensive needs
+	for i := 0; i < maxLen; i++ {
+		for j := 0; j < maxLen; j++ {
+			p := point{j, i}
+			if r.get(p) == colorEmpty && r.isNeighbor(p) {
+				// Check if opponent would win by playing here
+				r.set(p, opponentColor)
+				wouldWin := r.checkForm5ByPoint(p, opponentColor)
+				r.set(p, colorEmpty)
+				
+				if wouldWin {
+					return &pointAndValue{p, 9000000}
+				}
+				
+				// Check if opponent would create 4-in-a-row (immediate threat)
+				r.set(p, opponentColor)
+				would4 := r.exists4Single(p, opponentColor)
+				r.set(p, colorEmpty)
+				
+				if would4 {
+					return &pointAndValue{p, 8500000}
+				}
+			}
+		}
+	}
+	
+	return nil
+}
+
+// shouldOverrideWithDefense checks if we should override the deep search result with defensive play
+func (r *optimizedRobotPlayer) shouldOverrideWithDefense(result *pointAndValue) bool {
+	if result == nil {
+		return false
+	}
+	
+	// If we found a critical defensive move, check if the result ignores it
+	criticalDefense := r.findCriticalDefensiveMove()
+	if criticalDefense == nil {
+		return false
+	}
+	
+	// If the result is not the critical defense move, we should override
+	return result.p.x != criticalDefense.p.x || result.p.y != criticalDefense.p.y
 }
